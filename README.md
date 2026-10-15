@@ -16,17 +16,18 @@ O sistema possui uma **tela de login unificada**: ao digitar as credenciais na t
 
 ### 1. Perfil Super Admin (Dono da Plataforma)
 - **Login:** `Rafael_Martins`
-- - **Painel:** Abre exclusivamente o **PAINEL MASTER SAAS**.
-- **Segurança:** O Super Admin pode alterar sua senha pessoal a qualquer momento no botão **"Minha Senha"** no cabeçalho do painel.
+- **Senha Inicial:** Definida de forma segura no Apps Script (PropertiesService) através da execução da função `configurarSuperAdmin('suaNovaSenha')` ou senha temporária de implantação.
+- **Painel:** Abre exclusivamente o **PAINEL MASTER SAAS**.
+- **Segurança:** O Super Admin pode alterar sua senha pessoal a qualquer momento no botão **"Minha Senha"** no cabeçalho do painel. As credenciais mestras são protegidas com hash SHA-256 e nunca ficam expostas em células públicas da planilha.
 
 ### 2. Perfis de Gestores de Barbearias
 - **Padrão de Login Automático:** `Barbearia_Nome` (Ex: `Barbearia_NavalhaOuro`, `Barbearia_VintageEstilo`).
-- **Senha Inicial Padrão:** `abc123`.
-- **Troca Obrigatória:** No primeiro acesso do gestor, o sistema bloqueia e exige a criação de uma senha pessoal definitiva (mínimo de 6 caracteres, letras e números).
+- **Senha Inicial:** Senha temporária de primeiro acesso informada pelo administrador.
+- **Troca Obrigatória:** No primeiro acesso do gestor, o sistema bloqueia e exige a criação de uma senha pessoal definitiva (mínimo de 6 caracteres, letras e números). Todas as senhas são armazenadas com hash criptográfico SHA-256 + salt.
 
 ### 3. Perfis dos Barbeiros
 - **Padrão de Login Automático:** `PrimeiroNome_UltimoNome` (Ex: `Joao_Silva`, `Marcos_Santos`).
-- **Senha:** Definida pelo próprio barbeiro no primeiro acesso (ou temporária `abc123` caso o gestor realize o reset de senha).
+- **Senha:** Definida pelo próprio barbeiro no primeiro acesso (ou temporária caso o gestor realize o reset de senha).
 
 ---
 
@@ -35,15 +36,16 @@ O sistema possui uma **tela de login unificada**: ao digitar as credenciais na t
 Você pode testar todo o sistema imediatamente no seu computador sem configurar nada:
 
 1. Dê um duplo clique no arquivo **`Iniciar_Sistema.bat`** (ou abra o arquivo **`index.html`** no seu navegador).
-2. **Acesso como Dono do SaaS (Super Admin):**
+2. **Acesso como Dono do SaaS (Super Admin - Demonstração Local):**
    - Usuário: `Rafael_Martins`
+   - Senha de Demonstração: `admin123` *(em produção conectada ao GAS, utilize a senha configurada no ScriptProperties)*
    - *Abre o Painel Master com métricas consolidadas, lista de barbearias e controle de assinaturas.*
 3. **Acesso como Gestor de Barbearia:**
    - Usuário: `Barbearia_VintageEstilo`
-   - Senha: `abc123` *(solicita troca no 1º acesso)*
+   - Senha temporária: `abc123` *(solicita troca obrigatória no 1º acesso)*
 4. **Acesso como Barbeiro:**
    - Selecione a aba **App Barbeiro**.
-   - Login: `Joao_Silva` (primeiro acesso) ou `Marcos_Santos` (senha `123`).
+   - Login: `Joao_Silva` (primeiro acesso) ou `Marcos_Santos`.
 
 ---
 
@@ -60,12 +62,16 @@ Para sincronizar e persistir todos os dados no seu próprio Google Drive sem cus
 - Apague o código padrão e cole o conteúdo do arquivo [`backend/Code.gs`](backend/Code.gs).
 - Salve o projeto (`Ctrl + S`).
 
-### 3. Criar a Estrutura do Banco de Dados (1 Clique)
+### 3. Criar a Estrutura do Banco de Dados & Configurar Super Admin
 - No topo do editor do Apps Script, selecione a função **`setupDatabase`** e clique em **Executar (▶️)**.
 - Conceda as permissões de acesso ao Google.
+- **Definir Senha do Super Admin:** Para configurar sua senha mestra pessoal protegida por hash no `PropertiesService`, execute no Apps Script:
+  ```javascript
+  configurarSuperAdmin("SuaSenhaSegura123*");
+  ```
 - As **9 abas estruturadas** do banco de dados serão criadas com formatação e cores profissionais:
-  1. `Master_Barbearias` (ID, Nome Barbearia, Responsável, Telefone/WhatsApp, Login Gestor, Senha Gestor, Plano, Valor Pago, Forma Pagamento PIX, Data Vencimento, Status Licença, URL API, Criado Em)
-  2. `Configuracoes` (Super Admin Login/Senha, Nome da Barbearia, Logo, Status Licença, Telefone, Chave PIX, WhatsApp Suporte, Taxas PIX/Débito/Crédito e Prazos em Dias Úteis)
+  1. `Master_Barbearias` (ID, Nome Barbearia, Responsável, Telefone/WhatsApp, Login Gestor, Senha Gestor [Hash], Plano, Valor Pago, Forma Pagamento PIX, Data Vencimento, Status Licença, URL API, Criado Em)
+  2. `Configuracoes` (Super Admin Login, Nome da Barbearia, Logo, Status Licença, Telefone, Chave PIX, WhatsApp Suporte, Taxas PIX/Débito/Crédito e Prazos em Dias Úteis)
   3. `Clientes` (ID, Nome, Telefone/WhatsApp, Data de Criação)
   4. `Produtos` (ID, Nome, Preço, Quantidade em Estoque)
   5. `Servicos` (ID, Nome, Preço, Duração Estimada)

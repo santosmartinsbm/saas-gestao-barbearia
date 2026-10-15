@@ -160,7 +160,7 @@
               <i id="eye-gestor" data-lucide="eye" class="w-4 h-4"></i>
             </button>
           </div>
-          <p class="text-[11px] text-slate-500 mt-1">Primeiro acesso de novas barbearias: senha <code class="text-gold-400 font-mono">abc123</code></p>
+          <p class="text-[11px] text-slate-500 mt-1">Primeiro acesso? Digite a senha temporária informada pelo administrador.</p>
         </div>
 
         <button type="submit" class="w-full bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-400 hover:to-gold-500 text-dark-900 font-bold py-3 px-4 rounded-xl shadow-lg shadow-gold-500/20 transition-all flex items-center justify-center gap-2">
@@ -2673,7 +2673,7 @@
 
       <form onsubmit="handleSalvarSenhaMaster(event)" class="space-y-4 text-xs">
         <div>
-          <label class="block font-semibold text-slate-300 mb-1">Senha Atual (Padrão inicial: RSNf14232603*)</label>
+          <label class="block font-semibold text-slate-300 mb-1">Digite sua senha atual</label>
           <div class="relative">
             <input type="password" id="input-master-senha-atual" placeholder="Digite a senha atual" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500" required>
             <button type="button" onclick="togglePasswordVisibility('input-master-senha-atual', 'eye-master-1')" class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-300">

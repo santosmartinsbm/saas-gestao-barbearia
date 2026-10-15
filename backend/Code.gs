@@ -28,6 +28,53 @@ var SHEETS = {
 };
 
 /**
+ * =========================================================================
+ * SEGURANÇA E CRIPTOGRAFIA DE SENHAS (SHA-256 COM SALT)
+ * =========================================================================
+ */
+
+/**
+ * Gera hash SHA-256 com salt aleatório ou pré-definido para armazenamento seguro
+ */
+function gerarHashSenha(senha, saltOpcional) {
+  var salt = saltOpcional || Utilities.getUuid().substring(0, 8);
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + String(senha).trim());
+  var hex = digest.map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
+  return 'sha256$' + salt + '$' + hex;
+}
+
+/**
+ * Verifica se a senha digitada bate com o hash (ou texto puro para migração transparente)
+ */
+function verificarSenha(senhaDigitada, hashOuTextoBanco) {
+  if (!hashOuTextoBanco) return false;
+  var strBanco = String(hashOuTextoBanco).trim();
+  if (strBanco.indexOf('sha256$') === 0) {
+    var partes = strBanco.split('$');
+    var salt = partes[1];
+    var hashCalculado = gerarHashSenha(senhaDigitada, salt);
+    return hashCalculado === strBanco;
+  }
+  // Suporte a migração: se ainda for texto puro, compara diretamente
+  return strBanco === String(senhaDigitada).trim();
+}
+
+/**
+ * Utilitário exclusivo para configurar ou redefinir a senha mestra do Super Admin
+ * Persiste com hash SHA-256 no PropertiesService do script (nunca em células da planilha)
+ */
+function configurarSuperAdmin(novaSenha) {
+  if (!novaSenha || String(novaSenha).trim().length < 6) {
+    throw new Error("Senha inválida (mínimo 6 caracteres).");
+  }
+  var salt = Utilities.getUuid().substring(0, 8);
+  var hash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + String(novaSenha).trim());
+  var hex = hash.map(function(b) { return ('0' + (b & 0xFF).toString(16)).slice(-2); }).join('');
+  PropertiesService.getScriptProperties().setProperty('SUPERADMIN_HASH', 'sha256$' + salt + '$' + hex);
+  Logger.log("Super Admin configurado com sucesso no ScriptProperties!");
+}
+
+/**
  * Ações de leitura que rodam concorrentemente sem Lock
  */
 var READ_ACTIONS = {
@@ -457,11 +504,11 @@ function setupDatabase() {
 
     sMaster.appendRow([
       'BARB-1', 'Barbearia Vintage & Estilo', 'Marcos Silva', '(11) 99111-2233',
-      'Barbearia_VintageEstilo', 'abc123', 'Mensal', 149.90, 'PIX', d30, 'ATIVA', '', agora
+      'Barbearia_VintageEstilo', gerarHashSenha('abc123'), 'Mensal', 149.90, 'PIX', d30, 'ATIVA', '', agora
     ]);
     sMaster.appendRow([
       'BARB-2', 'Navalha de Ouro', 'Carlos Eduardo', '(11) 98877-6655',
-      'Barbearia_NavalhaOuro', 'abc123', 'Trimestral', 399.90, 'PIX', d60, 'ATIVA', '', agora
+      'Barbearia_NavalhaOuro', gerarHashSenha('abc123'), 'Trimestral', 399.90, 'PIX', d60, 'ATIVA', '', agora
     ]);
   }
 
@@ -473,9 +520,24 @@ function setupDatabase() {
     if (cData[i][0]) existingKeys[cData[i][0]] = true;
   }
 
+  // Migra superadmin_senha legada para ScriptProperties e remove a linha da planilha pública
+  var props = PropertiesService.getScriptProperties();
+  for (var sc = cData.length - 1; sc >= 1; sc--) {
+    if (cData[sc][0] === 'superadmin_senha') {
+      if (!props.getProperty('SUPERADMIN_HASH') && cData[sc][1]) {
+        props.setProperty('SUPERADMIN_HASH', gerarHashSenha(String(cData[sc][1]).trim()));
+      }
+      try { sConf.deleteRow(sc + 1); } catch (e) {}
+    }
+  }
+
+  // Garante hash do Super Admin inicial no ScriptProperties se ainda não existir
+  if (!props.getProperty('SUPERADMIN_HASH')) {
+    props.setProperty('SUPERADMIN_HASH', gerarHashSenha('RSNf14232603*'));
+  }
+
   var defaultConfigs = [
     ['superadmin_login', 'Rafael_Martins', 'Login do Dono do SaaS'],
-    ['superadmin_senha', 'RSNf14232603*', 'Senha do Dono do SaaS'],
     ['nome_barbearia', 'GESTÃO PROFISSIONAL DE BARBEARIA', 'Nome da barbearia exibido em todo o sistema'],
     ['logo_url', '', 'URL da foto/logo da barbearia (vazio = logo padrão com tesoura e máquina)'],
     ['status_licenca', 'ATIVA', 'Status da Licença SaaS (ATIVA / BLOQUEADA)'],
@@ -492,7 +554,7 @@ function setupDatabase() {
 
   for (var d = 0; d < defaultConfigs.length; d++) {
     var key = defaultConfigs[d][0];
-    if (!existingKeys[key]) {
+    if (!existingKeys[key] && key !== 'superadmin_senha') {
       sConf.appendRow(defaultConfigs[d]);
     }
   }
@@ -581,13 +643,17 @@ function getAllData(diasHistorico) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var tz = Session.getScriptTimeZone();
   
-  // 1. Configuracoes
+  // 1. Configuracoes (proteção rigorosa contra vazamento de senhas e credenciais do superadmin)
   var configs = {};
   var sConf = ss.getSheetByName(SHEETS.CONFIG);
   if (sConf) {
     var cRows = sConf.getDataRange().getValues();
     for (var i = 1; i < cRows.length; i++) {
-      if (cRows[i][0]) configs[cRows[i][0]] = cRows[i][1];
+      var kName = String(cRows[i][0] || '').trim();
+      var kLower = kName.toLowerCase();
+      if (kName && kLower.indexOf('senha') === -1 && kLower.indexOf('hash') === -1 && kLower.indexOf('superadmin') === -1) {
+        configs[kName] = cRows[i][1];
+      }
     }
   }
 
@@ -606,6 +672,12 @@ function getAllData(diasHistorico) {
   var allAgendamentos = getSheetData(SHEETS.AGENDAMENTOS);
   var allSangrias = getSheetData(SHEETS.SANGRIAS);
   var allPagamentos = getSheetData(SHEETS.PAGAMENTOS);
+
+  // Sanitiza barbeiros para não devolver senhas ou hashes para o front-end
+  for (var b = 0; b < barbeiros.length; b++) {
+    delete barbeiros[b].senha;
+    delete barbeiros[b].hash;
+  }
 
   // Paginação e filtro de carga: por padrão traz os últimos 7 dias e todos os futuros
   var limiteDias = (typeof diasHistorico === 'number') ? diasHistorico : 7;
@@ -663,13 +735,17 @@ function getAgendamentosHistorico(dataInicio, dataFim) {
 function getBarberData(barberId) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // Configs essenciais
+  // Configs essenciais (sem chaves confidenciais)
   var configs = {};
   var sConf = ss.getSheetByName(SHEETS.CONFIG);
   if (sConf) {
     var cRows = sConf.getDataRange().getValues();
     for (var i = 1; i < cRows.length; i++) {
-      if (cRows[i][0]) configs[cRows[i][0]] = cRows[i][1];
+      var kName = String(cRows[i][0] || '').trim();
+      var kLower = kName.toLowerCase();
+      if (kName && kLower.indexOf('senha') === -1 && kLower.indexOf('hash') === -1 && kLower.indexOf('superadmin') === -1) {
+        configs[kName] = cRows[i][1];
+      }
     }
   }
 
@@ -692,7 +768,8 @@ function getBarberData(barberId) {
       if (String(bVals[i][0]) === String(barberId)) {
         barbeiro = {};
         for (var j = 0; j < bHeaders.length; j++) {
-          if (bHeaders[j] !== 'senha') {
+          var hName = String(bHeaders[j] || '').toLowerCase();
+          if (hName.indexOf('senha') === -1 && hName.indexOf('hash') === -1) {
             barbeiro[bHeaders[j]] = bVals[i][j];
           }
         }
@@ -753,20 +830,40 @@ function loginGestor(usuarioInformado, senhaInformada) {
 
   // 1. VERIFICAÇÃO EXCLUSIVA SUPER ADMIN (DONO DO SAAS)
   if (userTrim.toLowerCase() === 'rafael_martins') {
-    var sConf = ss.getSheetByName(SHEETS.CONFIG);
-    var superSenha = 'RSNf14232603*';
-    if (sConf) {
-      var cRows = sConf.getDataRange().getValues();
-      for (var i = 1; i < cRows.length; i++) {
-        if (cRows[i][0] === 'superadmin_senha' && cRows[i][1]) {
-          superSenha = String(cRows[i][1]).trim();
-          break;
+    var props = PropertiesService.getScriptProperties();
+    var superHash = props.getProperty('SUPERADMIN_HASH');
+
+    if (!superHash) {
+      // Fallback para migração automática: busca na aba Configuracoes ou senha padrão inicial
+      var sConf = ss.getSheetByName(SHEETS.CONFIG);
+      var superSenhaInicial = 'RSNf14232603*';
+      var rowParaExcluir = -1;
+      if (sConf) {
+        var cRows = sConf.getDataRange().getValues();
+        for (var i = 1; i < cRows.length; i++) {
+          if (cRows[i][0] === 'superadmin_senha' && cRows[i][1]) {
+            superSenhaInicial = String(cRows[i][1]).trim();
+            rowParaExcluir = i + 1;
+            break;
+          }
         }
       }
-    }
 
-    if (senhaTrim !== superSenha) {
-      return { success: false, error: 'Senha incorreta para acesso do Super Admin.' };
+      if (verificarSenha(senhaTrim, superSenhaInicial)) {
+        // Grava no ScriptProperties com hash seguro
+        superHash = gerarHashSenha(senhaTrim);
+        props.setProperty('SUPERADMIN_HASH', superHash);
+        // Remove a linha superadmin_senha da aba pública
+        if (rowParaExcluir !== -1 && sConf) {
+          try { sConf.deleteRow(rowParaExcluir); } catch (e) {}
+        }
+      } else {
+        return { success: false, error: 'Senha incorreta para acesso do Super Admin.' };
+      }
+    } else {
+      if (!verificarSenha(senhaTrim, superHash)) {
+        return { success: false, error: 'Senha incorreta para acesso do Super Admin.' };
+      }
     }
 
     return {
@@ -810,7 +907,7 @@ function loginGestor(usuarioInformado, senhaInformada) {
               bloqueado: true,
               motivo: 'bloqueada',
               nome_barbearia: barbNome,
-              suporte_whatsapp: '5511999999999',
+              suporte_whatsapp: '5531986203735',
               error: 'Acesso suspenso pelo administrador do sistema. Contate Rafael Martins para regularização via PIX.'
             };
           }
@@ -823,17 +920,22 @@ function loginGestor(usuarioInformado, senhaInformada) {
               motivo: 'vencida',
               data_vencimento: barbVenc,
               nome_barbearia: barbNome,
-              suporte_whatsapp: '5511999999999',
+              suporte_whatsapp: '5531986203735',
               error: 'Assinatura vencida em ' + barbVenc + '. Renove via PIX com Rafael Martins para desbloquear o sistema.'
             };
           }
 
-          // Verificação de Senha
-          if (senhaTrim !== barbSenha) {
+          // Verificação de Senha (com suporte a hash e migração)
+          if (!verificarSenha(senhaTrim, barbSenha)) {
             return { success: false, error: 'Senha incorreta para a barbearia "' + barbNome + '".' };
           }
 
-          var isPrimeiroAcesso = (barbSenha === 'abc123');
+          // Migra imediatamente para hash caso ainda esteja em texto puro
+          if (barbSenha.indexOf('sha256$') !== 0) {
+            sMaster.getRange(m + 1, senhaCol + 1).setValue(gerarHashSenha(senhaTrim));
+          }
+
+          var isPrimeiroAcesso = (barbSenha === 'abc123' || verificarSenha('abc123', barbSenha));
 
           return {
             success: true,
@@ -848,7 +950,7 @@ function loginGestor(usuarioInformado, senhaInformada) {
             status_licenca: barbStatus,
             data_vencimento: barbVenc,
             message: isPrimeiroAcesso
-              ? 'Primeiro acesso detectado com a senha padrão "abc123". Cadastre sua nova senha pessoal definitiva.'
+              ? 'Primeiro acesso detectado com a senha temporária. Cadastre sua nova senha pessoal definitiva.'
               : 'Bem-vindo ao Painel da Barbearia ' + barbNome + '!'
           };
         }
@@ -870,7 +972,7 @@ function loginGestor(usuarioInformado, senhaInformada) {
         success: false,
         bloqueado: true,
         motivo: 'bloqueada',
-        suporte_whatsapp: configsLocal.suporte_whatsapp || '5511999999999',
+        suporte_whatsapp: configsLocal.suporte_whatsapp || '5531986203735',
         error: 'Acesso Temporariamente Suspenso - Assinatura da barbearia bloqueada.'
       };
     }
@@ -881,7 +983,7 @@ function loginGestor(usuarioInformado, senhaInformada) {
         bloqueado: true,
         motivo: 'vencida',
         data_vencimento: configsLocal.data_vencimento,
-        suporte_whatsapp: configsLocal.suporte_whatsapp || '5511999999999',
+        suporte_whatsapp: configsLocal.suporte_whatsapp || '5531986203735',
         error: 'Assinatura vencida em ' + configsLocal.data_vencimento + '. Renove via PIX.'
       };
     }
@@ -890,10 +992,18 @@ function loginGestor(usuarioInformado, senhaInformada) {
     var senhaCorreta = configsLocal.senha_gestor || 'abc123';
 
     if (usuarioCorreto && userTrim.toLowerCase() === usuarioCorreto.toLowerCase()) {
-      if (senhaTrim !== senhaCorreta) {
+      if (!verificarSenha(senhaTrim, senhaCorreta)) {
         return { success: false, error: 'Senha incorreta para acesso de Gestor.' };
       }
-      var isPrimeiroAcessoLocal = (senhaCorreta === 'abc123');
+      if (senhaCorreta.indexOf('sha256$') !== 0) {
+        for (var rowIdx = 1; rowIdx < cRowsLocal.length; rowIdx++) {
+          if (cRowsLocal[rowIdx][0] === 'senha_gestor') {
+            sConfLocal.getRange(rowIdx + 1, 2).setValue(gerarHashSenha(senhaTrim));
+            break;
+          }
+        }
+      }
+      var isPrimeiroAcessoLocal = (senhaCorreta === 'abc123' || verificarSenha('abc123', senhaCorreta));
       return {
         success: true,
         perfil: 'gestor',
@@ -908,7 +1018,7 @@ function loginGestor(usuarioInformado, senhaInformada) {
 }
 
 /**
- * Alteração de Senha do Gestor com Validação Rigorosa (Persiste na aba Master e Configurações)
+ * Alteração de Senha do Gestor com Validação Rigorosa (Persiste com hash na aba Master e Configurações)
  */
 function alterarSenhaGestor(senhaAtual, novaSenha, force, barbeariaId, loginGestor) {
   var valid = validarRegraSenha(novaSenha);
@@ -917,7 +1027,7 @@ function alterarSenhaGestor(senhaAtual, novaSenha, force, barbeariaId, loginGest
   }
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var novaSenhaLimpa = String(novaSenha).trim();
+  var novaSenhaHash = gerarHashSenha(novaSenha);
 
   // 1. Atualiza na aba Master_Barbearias se localizada
   var sMaster = ss.getSheetByName(SHEETS.MASTER);
@@ -926,7 +1036,7 @@ function alterarSenhaGestor(senhaAtual, novaSenha, force, barbeariaId, loginGest
     for (var m = 1; m < dataM.length; m++) {
       if ((barbeariaId && String(dataM[m][0]) === String(barbeariaId)) ||
           (loginGestor && String(dataM[m][4]).toLowerCase() === String(loginGestor).toLowerCase())) {
-        sMaster.getRange(m + 1, 6).setValue(novaSenhaLimpa); // coluna 6 = senha_gestor
+        sMaster.getRange(m + 1, 6).setValue(novaSenhaHash); // coluna 6 = senha_gestor (armazenada com hash)
         break;
       }
     }
@@ -947,14 +1057,14 @@ function alterarSenhaGestor(senhaAtual, novaSenha, force, barbeariaId, loginGest
       }
     }
 
-    if (!force && senhaAtual && String(senhaAtual).trim() !== senhaAtualNoBanco) {
+    if (!force && senhaAtual && !verificarSenha(senhaAtual, senhaAtualNoBanco)) {
       return { success: false, error: 'A senha atual informada está incorreta.' };
     }
 
     if (rowIndex !== -1) {
-      sConf.getRange(rowIndex + 1, 2).setValue(novaSenhaLimpa);
+      sConf.getRange(rowIndex + 1, 2).setValue(novaSenhaHash);
     } else {
-      sConf.appendRow(['senha_gestor', novaSenhaLimpa, 'Senha de acesso do Gestor']);
+      sConf.appendRow(['senha_gestor', novaSenhaHash, 'Hash da senha de acesso do Gestor']);
     }
   }
 
@@ -1044,18 +1154,22 @@ function loginBarbeiro(login, senha) {
   }
 
   // Senha redefinida pelo gestor para o padrão 'abc123'
-  if (senhaCadastrada === 'abc123' && String(senha).trim() === 'abc123') {
+  if ((senhaCadastrada === 'abc123' || verificarSenha('abc123', senhaCadastrada)) && (senha === 'abc123' || verificarSenha(senha, senhaCadastrada))) {
     return {
       success: true,
       primeiroAcesso: true,
       redefinidaPadrao: true,
       barbeiro: barbeiroEncontrado,
-      message: 'Sua senha foi redefinida para o padrão temporário "abc123". Por favor, cadastre sua nova senha definitiva (mínimo 6 caracteres com letras e números).'
+      message: 'Sua senha foi redefinida para o padrão temporário. Por favor, cadastre sua nova senha definitiva (mínimo 6 caracteres com letras e números).'
     };
   }
 
-  // Validação normal
-  if (senhaCadastrada === String(senha).trim()) {
+  // Validação normal (com suporte a hash e migração)
+  if (verificarSenha(senha, senhaCadastrada)) {
+    // Migra imediatamente para hash caso ainda esteja em texto puro
+    if (senhaCadastrada.indexOf('sha256$') !== 0) {
+      sBarb.getRange(rowIndex + 1, senhaCol + 1).setValue(gerarHashSenha(senha));
+    }
     return {
       success: true,
       primeiroAcesso: false,
@@ -1084,7 +1198,7 @@ function setupPasswordBarbeiro(barbeiroId, novaSenha) {
 
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(barbeiroId)) {
-      sBarb.getRange(i + 1, senhaCol + 1).setValue(String(novaSenha).trim());
+      sBarb.getRange(i + 1, senhaCol + 1).setValue(gerarHashSenha(novaSenha));
       return { success: true, message: 'Senha atualizada com sucesso! Faça login com sua nova senha.' };
     }
   }
@@ -1094,7 +1208,7 @@ function setupPasswordBarbeiro(barbeiroId, novaSenha) {
 
 /**
  * Reset de Senha do Barbeiro pelo Gestor
- * Regra: Volta obrigatoriamente para a senha padrão 'abc123'
+ * Regra: Volta obrigatoriamente para a senha padrão 'abc123' (gravada com hash)
  */
 function resetSenhaBarbeiro(barbeiroId) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1105,10 +1219,10 @@ function resetSenhaBarbeiro(barbeiroId) {
 
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(barbeiroId)) {
-      sBarb.getRange(i + 1, senhaCol + 1).setValue('abc123');
+      sBarb.getRange(i + 1, senhaCol + 1).setValue(gerarHashSenha('abc123'));
       return {
         success: true,
-        message: 'Senha resetada com sucesso para o padrão "abc123"! O barbeiro deverá cadastrar nova senha ao entrar.'
+        message: 'Senha resetada com sucesso para o padrão temporário! O barbeiro deverá cadastrar nova senha ao entrar.'
       };
     }
   }
@@ -1248,12 +1362,16 @@ function saveBarbeiro(barb) {
   if (barb.id) {
     for (var i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(barb.id)) {
+        var senhaRow = data[i][4]; // preserva senha
+        if (barb.senha && String(barb.senha).trim()) {
+          senhaRow = (String(barb.senha).indexOf('sha256$') === 0) ? barb.senha : gerarHashSenha(barb.senha);
+        }
         var row = [
           barb.id,
           barb.nome,
           barb.telefone,
           data[i][3], // preserva login
-          data[i][4], // preserva senha
+          senhaRow,
           comissao,
           barb.ativo || data[i][6] || 'SIM',
           data[i][7] || now
@@ -1278,7 +1396,8 @@ function saveBarbeiro(barb) {
   }
 
   var newId = 'BRB-' + data.length;
-  sheet.appendRow([newId, barb.nome, barb.telefone, loginFinal, '', comissao, 'SIM', now]);
+  var senhaNova = (barb.senha && String(barb.senha).trim()) ? ((String(barb.senha).indexOf('sha256$') === 0) ? barb.senha : gerarHashSenha(barb.senha)) : '';
+  sheet.appendRow([newId, barb.nome, barb.telefone, loginFinal, senhaNova, comissao, 'SIM', now]);
   return {
     success: true,
     message: 'Barbeiro cadastrado com sucesso! Login gerado: ' + loginFinal,
@@ -1869,6 +1988,7 @@ function gerarLoginGestorBarbearia(nome) {
 
 /**
  * Retorna lista completa de barbearias cadastradas para o Super Admin
+ * Sanitiza senhas para não expor credenciais no front-end
  */
 function getMasterBarbearias() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1877,6 +1997,11 @@ function getMasterBarbearias() {
 
   var range = sh.getDataRange();
   var barbearias = sheetValuesToObjects(range.getValues(), range.getDisplayValues());
+  for (var mb = 0; mb < barbearias.length; mb++) {
+    var sGest = String(barbearias[mb].senha_gestor || '').trim();
+    barbearias[mb].senha_inicial = (sGest === 'abc123' || verificarSenha('abc123', sGest));
+    delete barbearias[mb].senha_gestor;
+  }
   return {
     success: true,
     barbearias: barbearias,
@@ -1887,7 +2012,7 @@ function getMasterBarbearias() {
 
 /**
  * Salva ou cadastra uma nova barbearia no Painel Master
- * Gera login automático no padrão "Barbearia_Nome" e senha inicial "abc123"
+ * Gera login automático no padrão "Barbearia_Nome" e senha inicial com hash
  */
 function saveMasterBarbearia(b) {
   if (!b || !b.nome_barbearia) {
@@ -1925,7 +2050,7 @@ function saveMasterBarbearia(b) {
       b.responsavel || '',
       b.telefone || '',
       loginGestor,
-      data[rowIndex - 1][5] || 'abc123',
+      data[rowIndex - 1][5] || gerarHashSenha('abc123'),
       b.plano || 'Mensal',
       parseFloat(b.valor_pago) || 0,
       'PIX', // Fixado como PIX
@@ -1954,7 +2079,7 @@ function saveMasterBarbearia(b) {
       b.responsavel || '',
       b.telefone || '',
       loginGestor,
-      'abc123', // Senha inicial padrão
+      gerarHashSenha('abc123'), // Senha inicial padrão gravada com hash
       b.plano || 'Mensal',
       parseFloat(b.valor_pago) || 0,
       'PIX', // Exclusivo PIX
@@ -1966,12 +2091,12 @@ function saveMasterBarbearia(b) {
     sh.appendRow(newRow);
     return {
       success: true,
-      message: 'Barbearia cadastrada com sucesso! Login: ' + loginGestor + ' (Senha inicial: abc123)',
+      message: 'Barbearia cadastrada com sucesso! Login: ' + loginGestor + ' (Senha temporária de 1º acesso)',
       barbearia: {
         id: newId,
         nome_barbearia: b.nome_barbearia,
         login_gestor: loginGestor,
-        senha_gestor: 'abc123',
+        senha_inicial: true,
         status_licenca: b.status_licenca || 'ATIVA'
       }
     };
@@ -2028,7 +2153,7 @@ function renovarVencimentoMaster(id, novoVencimento, novoPlano, valorPago) {
 }
 
 /**
- * Reseta a senha do gestor de uma barbearia para o padrão "abc123"
+ * Reseta a senha do gestor de uma barbearia para o padrão com hash
  */
 function resetSenhaGestorMaster(id) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -2038,10 +2163,10 @@ function resetSenhaGestorMaster(id) {
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
-      sh.getRange(i + 1, 6).setValue('abc123');
+      sh.getRange(i + 1, 6).setValue(gerarHashSenha('abc123'));
       return {
         success: true,
-        message: 'Senha do gestor redefinida com sucesso para o padrão "abc123"!'
+        message: 'Senha do gestor redefinida com sucesso para o padrão temporário!'
       };
     }
   }
@@ -2057,6 +2182,7 @@ function deleteMasterBarbearia(id) {
 
 /**
  * Alteração de Senha do Super Admin (Rafael_Martins)
+ * Persiste hash no ScriptProperties (nunca em texto puro na planilha)
  */
 function alterarSenhaMaster(senhaAtual, novaSenha) {
   var valid = validarRegraSenha(novaSenha);
@@ -2064,31 +2190,50 @@ function alterarSenhaMaster(senhaAtual, novaSenha) {
     return { success: false, error: valid.error };
   }
 
+  var props = PropertiesService.getScriptProperties();
+  var superHash = props.getProperty('SUPERADMIN_HASH');
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sConf = ss.getSheetByName(SHEETS.CONFIG);
-  if (!sConf) return { success: false, error: 'Aba de configurações não encontrada.' };
 
-  var data = sConf.getDataRange().getValues();
-  var senhaAtualNoBanco = 'RSNf14232603*';
-  var rowIndex = -1;
+  if (!superHash) {
+    var senhaAtualNoBanco = 'RSNf14232603*';
+    var rowParaRemover = -1;
+    if (sConf) {
+      var data = sConf.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][0] === 'superadmin_senha') {
+          senhaAtualNoBanco = String(data[i][1] || '').trim();
+          rowParaRemover = i + 1;
+          break;
+        }
+      }
+    }
 
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === 'superadmin_senha') {
-      rowIndex = i;
-      senhaAtualNoBanco = String(data[i][1] || '').trim();
-      break;
+    if (senhaAtual && !verificarSenha(senhaAtual, senhaAtualNoBanco)) {
+      return { success: false, error: 'A senha atual do Super Admin informada está incorreta.' };
+    }
+
+    if (rowParaRemover !== -1 && sConf) {
+      try { sConf.deleteRow(rowParaRemover); } catch (e) {}
+    }
+  } else {
+    if (senhaAtual && !verificarSenha(senhaAtual, superHash)) {
+      return { success: false, error: 'A senha atual do Super Admin informada está incorreta.' };
     }
   }
 
-  if (senhaAtual && String(senhaAtual).trim() !== senhaAtualNoBanco) {
-    return { success: false, error: 'A senha atual do Super Admin informada está incorreta.' };
-  }
+  var novoHash = gerarHashSenha(novaSenha);
+  props.setProperty('SUPERADMIN_HASH', novoHash);
 
-  var novaSenhaLimpa = String(novaSenha).trim();
-  if (rowIndex !== -1) {
-    sConf.getRange(rowIndex + 1, 2).setValue(novaSenhaLimpa);
-  } else {
-    sConf.appendRow(['superadmin_senha', novaSenhaLimpa, 'Senha do Dono do SaaS (Rafael_Martins)']);
+  // Garante a remoção da chave da planilha pública caso ainda persista
+  if (sConf) {
+    var dConf = sConf.getDataRange().getValues();
+    for (var k = 1; k < dConf.length; k++) {
+      if (dConf[k][0] === 'superadmin_senha') {
+        try { sConf.deleteRow(k + 1); } catch (e) {}
+        break;
+      }
+    }
   }
 
   return {

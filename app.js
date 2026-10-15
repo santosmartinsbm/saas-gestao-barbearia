@@ -47,7 +47,6 @@ let appState = {
   },
   masterConfig: {
     superadmin_login: 'Rafael_Martins',
-    superadmin_senha: 'RSNf14232603*',
     suporte_whatsapp: '5531986203735',
     chave_pix: '31986203735'
   },
@@ -222,7 +221,6 @@ function getDefaultMockData() {
     },
     masterConfig: {
       superadmin_login: 'Rafael_Martins',
-      superadmin_senha: 'RSNf14232603*',
       suporte_whatsapp: '5531986203735',
       chave_pix: '31986203735'
     },
@@ -730,15 +728,18 @@ function handleLocalAction(action, payload) {
     }
 
     case 'alterarSenhaMaster': {
-      const valid = validarRegraSenha(payload.novaSenha);
+      const sAtual = payload.senha_atual || payload.senhaAtual;
+      const sNova = payload.nova_senha || payload.novaSenha;
+      const valid = validarRegraSenha(sNova);
       if (!valid.valido) return { success: false, error: valid.erro };
-      if (payload.senhaAtual && payload.senhaAtual !== (appState.masterConfig?.superadmin_senha || 'RSNf14232603*')) {
+      const senhaDemoEsperada = appState.masterConfig?._demo_superadmin_senha || 'admin123';
+      if (sAtual && sAtual !== senhaDemoEsperada) {
         return { success: false, error: 'Senha atual do Super Admin incorreta.' };
       }
       if (!appState.masterConfig) appState.masterConfig = {};
-      appState.masterConfig.superadmin_senha = payload.novaSenha;
+      appState.masterConfig._demo_superadmin_senha = sNova;
       saveLocalData();
-      return { success: true, message: 'Senha do Super Admin alterada com sucesso!' };
+      return { success: true, message: 'Senha do Super Admin alterada com sucesso no modo local/demonstração!' };
     }
 
     case 'loginGestor': {
@@ -746,11 +747,11 @@ function handleLocalAction(action, payload) {
       const senhaDigitada = String(payload.senha || '').trim();
       const hoje = getHojeString();
 
-      // 1. Super Admin (Rafael_Martins)
+      // 1. Super Admin (Rafael_Martins) - No modo demo sem backend, aceita credencial mock genérica
       if (usuarioDigitado.toLowerCase() === 'rafael_martins') {
-        const superSenha = appState.masterConfig?.superadmin_senha || 'RSNf14232603*';
+        const superSenha = appState.masterConfig?._demo_superadmin_senha || 'admin123';
         if (senhaDigitada !== superSenha) {
-          return { success: false, error: 'Senha incorreta para acesso Super Admin.' };
+          return { success: false, error: 'Senha incorreta para acesso Super Admin (Modo Demonstração).' };
         }
         return {
           success: true,
@@ -5226,7 +5227,7 @@ async function renderMasterView() {
 
     const zapLimpo = limparTelefone(b.telefone);
     const apiUrlGestor = b.api_url ? `https://saas-gestao-barbearia.vercel.app/?api=${encodeURIComponent(b.api_url)}` : 'https://saas-gestao-barbearia.vercel.app/';
-    const msgGestor = `Olá ${b.responsavel || b.nome_barbearia}! Acesse o sistema da sua barbearia pelo link: ${apiUrlGestor}\nSeu login: ${b.login_gestor}\nSenha inicial: ${b.senha_gestor || 'abc123'}`;
+    const msgGestor = `Olá ${b.responsavel || b.nome_barbearia}! Acesse o sistema da sua barbearia pelo link: ${apiUrlGestor}\nSeu login: ${b.login_gestor}\nSenha temporária: abc123 (será solicitada a troca no 1º acesso)`;
     const zapLink = zapLimpo ? `https://wa.me/55${zapLimpo}?text=${encodeURIComponent(msgGestor)}` : '#';
 
     html += `
@@ -5241,7 +5242,7 @@ async function renderMasterView() {
             ${esc(b.login_gestor)}
           </div>
           <div class="text-[10px] text-slate-500 mt-0.5">
-            ${b.senha_gestor === 'abc123' ? '<span class="text-amber-400 font-medium">Senha inicial (abc123)</span>' : '<span class="text-emerald-400">Senha pessoal ativa</span>'}
+            ${(b.senha_inicial || b.senha_gestor === 'abc123') ? '<span class="text-amber-400 font-medium">Senha temporária (abc123)</span>' : '<span class="text-emerald-400">Senha pessoal ativa</span>'}
           </div>
         </td>
 
@@ -5734,9 +5735,6 @@ async function handleSalvarSenhaMaster(event) {
 
   if (res && res.success) {
     closeModal('modal-alterar-senha-master');
-    if (!appState.masterConfig) appState.masterConfig = {};
-    appState.masterConfig.superadmin_senha = sNova;
-    saveLocalData();
     showToast('Senha do Super Admin alterada com sucesso!', 'success');
   } else {
     showToast(res ? res.error : 'Erro ao alterar senha do Super Admin.', 'error');
