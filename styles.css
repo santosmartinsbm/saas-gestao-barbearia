@@ -130,20 +130,29 @@
 
 /* Estilo para impressão de comprovante / fechamento de caixa */
 @media print {
+  @page {
+    size: 80mm auto;
+    margin: 3mm;
+  }
   body {
     background: white !important;
     color: black !important;
   }
-  .no-print, header, aside, #toast-container, .modal-backdrop, #global-loading-bar {
+  .no-print, header, aside, #toast-container, .fixed, #global-loading-bar {
     display: none !important;
   }
-  .print-area {
+  #print-fechamento-area, .print-area {
     display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 100% !important;
     max-width: 80mm !important;
     margin: 0 auto !important;
-    font-size: 12px !important;
+    font-size: 11px !important;
+    font-family: 'Courier New', Courier, monospace !important;
     color: black !important;
+    background: white !important;
   }
 }
 

@@ -3399,109 +3399,68 @@ function imprimirCupomFechamento(dados) {
   const saldoGaveta = (porForma.Dinheiro.bruto || 0) - totalSangrias - pagamentosDinheiro;
   const saldoLiquidoFinal = totalLiquido - totalSangrias - totalPagamentos;
 
-  const cupomHtml = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <title>Fechamento de Caixa - ${nomeBarbearia}</title>
-  <style>
-    @page { size: 80mm auto; margin: 3mm; }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', Courier, monospace; color: #000; background: #fff; }
-    body { padding: 6px 4px; font-size: 11px; line-height: 1.35; max-width: 380px; margin: 0 auto; }
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .bold { font-weight: bold; }
-    .divider { border-top: 1px dashed #000; margin: 6px 0; }
-    .divider-solid { border-top: 2px solid #000; margin: 6px 0; }
-    .row { display: flex; justify-content: space-between; margin: 2px 0; }
-    .title { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; }
-    .subtitle { font-size: 11px; font-weight: bold; margin-top: 2px; }
-    .section-title { font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 3px; letter-spacing: 0.3px; }
-    .signature-box { margin-top: 24px; text-align: center; }
-    .signature-line { border-top: 1px solid #000; width: 80%; margin: 0 auto 4px auto; }
-    @media print {
-      body { width: 100%; max-width: 100%; padding: 0; }
-      .no-print { display: none !important; }
-    }
-  </style>
-</head>
-<body>
-  <div class="text-center">
-    <div class="title">${nomeBarbearia}</div>
-    ${tel ? `<div style="font-size: 10px;">Contato: ${tel}</div>` : ''}
-    <div class="subtitle">*** FECHAMENTO DE CAIXA DIÁRIO ***</div>
-    <div style="font-size: 10px; margin-top: 2px;">Data de Referência: <strong>${dataRefPt}</strong></div>
-    <div style="font-size: 9px; color: #444;">Emissão: ${dataHoraEmissao}</div>
-  </div>
+  const cupomConteudo = `
+  <div style="font-family: 'Courier New', Courier, monospace; color: #000; background: #fff; padding: 4px; font-size: 11px; line-height: 1.35; width: 100%; max-width: 80mm; margin: 0 auto;">
+    <div style="text-align: center;">
+      <div style="font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px;">${nomeBarbearia}</div>
+      ${tel ? `<div style="font-size: 10px;">Contato: ${tel}</div>` : ''}
+      <div style="font-size: 11px; font-weight: bold; margin-top: 2px;">*** FECHAMENTO DE CAIXA DIÁRIO ***</div>
+      <div style="font-size: 10px; margin-top: 2px;">Data de Referência: <strong>${dataRefPt}</strong></div>
+      <div style="font-size: 9px; color: #444;">Emissão: ${dataHoraEmissao}</div>
+    </div>
 
-  <div class="divider"></div>
+    <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
 
-  <div class="section-title">RESUMO DO FATURAMENTO</div>
-  <div class="row"><span>Total Bruto (${atendimentosDia.length} atend.):</span><span class="bold">${formatarMoeda(totalBruto)}</span></div>
-  <div class="row"><span>(-) Taxas de Maquininha:</span><span>-${formatarMoeda(totalTaxas)}</span></div>
-  <div class="row bold" style="border-top: 1px dotted #000; padding-top: 2px; margin-top: 2px;">
-    <span>(=) FATURAMENTO LÍQUIDO:</span><span>${formatarMoeda(totalLiquido)}</span>
-  </div>
+    <div style="font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 3px;">RESUMO DO FATURAMENTO</div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0;"><span>Total Bruto (${atendimentosDia.length} atend.):</span><span style="font-weight: bold;">${formatarMoeda(totalBruto)}</span></div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0;"><span>(-) Taxas de Maquininha:</span><span>-${formatarMoeda(totalTaxas)}</span></div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0; font-weight: bold; border-top: 1px dotted #000; padding-top: 2px; margin-top: 2px;">
+      <span>(=) FATURAMENTO LÍQUIDO:</span><span>${formatarMoeda(totalLiquido)}</span>
+    </div>
 
-  <div class="divider"></div>
+    <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
 
-  <div class="section-title">ARRECADAÇÃO POR FORMA</div>
-  <div class="row"><span>💵 Dinheiro Físico:</span><span class="bold">${formatarMoeda(porForma.Dinheiro.bruto)}</span></div>
-  <div class="row"><span>⚡ PIX (D+0 Conta):</span><span class="bold">${formatarMoeda(porForma.PIX.bruto)}</span></div>
-  <div class="row"><span>💳 Cartão Débito:</span><span>${formatarMoeda(porForma.Cartao_Debito.bruto)} (Líq: ${formatarMoeda(porForma.Cartao_Debito.liquido)})</span></div>
-  <div class="row"><span>💳 Cartão Crédito:</span><span>${formatarMoeda(porForma.Cartao_Credito.bruto)} (Líq: ${formatarMoeda(porForma.Cartao_Credito.liquido)})</span></div>
+    <div style="font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 3px;">ARRECADAÇÃO POR FORMA</div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0;"><span>💵 Dinheiro Físico:</span><span style="font-weight: bold;">${formatarMoeda(porForma.Dinheiro.bruto)}</span></div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0;"><span>⚡ PIX (D+0 Conta):</span><span style="font-weight: bold;">${formatarMoeda(porForma.PIX.bruto)}</span></div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0;"><span>💳 Cartão Débito:</span><span>${formatarMoeda(porForma.Cartao_Debito.bruto)} (Líq: ${formatarMoeda(porForma.Cartao_Debito.liquido)})</span></div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0;"><span>💳 Cartão Crédito:</span><span>${formatarMoeda(porForma.Cartao_Credito.bruto)} (Líq: ${formatarMoeda(porForma.Cartao_Credito.liquido)})</span></div>
 
-  <div class="divider"></div>
+    <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
 
-  <div class="section-title">SAÍDAS E RETIRADAS DO DIA</div>
-  <div class="row"><span>(-) Sangrias do Caixa:</span><span>-${formatarMoeda(totalSangrias)}</span></div>
-  <div class="row"><span>(-) Comissões Pagas:</span><span>-${formatarMoeda(totalPagamentos)}</span></div>
-  ${pagamentosDinheiro > 0 ? `<div class="row" style="font-size:9px; padding-left: 8px;"><span>↳ Pagtos em Espécie:</span><span>-${formatarMoeda(pagamentosDinheiro)}</span></div>` : ''}
+    <div style="font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 3px;">SAÍDAS E RETIRADAS DO DIA</div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0;"><span>(-) Sangrias do Caixa:</span><span>-${formatarMoeda(totalSangrias)}</span></div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0;"><span>(-) Comissões Pagas:</span><span>-${formatarMoeda(totalPagamentos)}</span></div>
+    ${pagamentosDinheiro > 0 ? `<div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 9px; padding-left: 8px;"><span>↳ Pagtos em Espécie:</span><span>-${formatarMoeda(pagamentosDinheiro)}</span></div>` : ''}
 
-  <div class="divider-solid"></div>
+    <div style="border-top: 2px solid #000; margin: 6px 0;"></div>
 
-  <div class="section-title">CONFERÊNCIA DE GAVETA & SALDO</div>
-  <div class="row bold" style="font-size: 12px;">
-    <span>SALDO EM GAVETA (FÍSICO):</span>
-    <span>${formatarMoeda(saldoGaveta)}</span>
-  </div>
-  <div style="font-size: 9px; color: #555; margin-bottom: 4px;">(Entradas em Dinheiro - Sangrias - Pagtos em Dinheiro)</div>
+    <div style="font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 3px;">CONFERÊNCIA DE GAVETA & SALDO</div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0; font-weight: bold; font-size: 12px;">
+      <span>SALDO EM GAVETA (FÍSICO):</span>
+      <span>${formatarMoeda(saldoGaveta)}</span>
+    </div>
+    <div style="font-size: 9px; color: #555; margin-bottom: 4px;">(Entradas em Dinheiro - Sangrias - Pagtos em Dinheiro)</div>
 
-  <div class="row bold" style="border-top: 1px dotted #000; padding-top: 3px;">
-    <span>SALDO LÍQUIDO DO DIA:</span>
-    <span>${formatarMoeda(saldoLiquidoFinal)}</span>
-  </div>
-  <div style="font-size: 9px; color: #555;">(Faturamento Líquido Real - Todas as Saídas)</div>
+    <div style="display: flex; justify-content: space-between; margin: 2px 0; font-weight: bold; border-top: 1px dotted #000; padding-top: 3px;">
+      <span>SALDO LÍQUIDO DO DIA:</span>
+      <span>${formatarMoeda(saldoLiquidoFinal)}</span>
+    </div>
+    <div style="font-size: 9px; color: #555;">(Faturamento Líquido Real - Todas as Saídas)</div>
 
-  <div class="divider"></div>
+    <div style="border-top: 1px dashed #000; margin: 6px 0;"></div>
 
-  <div class="signature-box">
-    <div class="signature-line"></div>
-    <div style="font-size: 10px;">Assinatura do Conferente / Gestor</div>
-  </div>
+    <div style="margin-top: 24px; text-align: center;">
+      <div style="border-top: 1px solid #000; width: 80%; margin: 0 auto 4px auto;"></div>
+      <div style="font-size: 10px;">Assinatura do Conferente / Gestor</div>
+    </div>
+  </div>`;
 
-  <div class="no-print" style="margin-top: 16px; text-align: center;">
-    <button onclick="window.print()" style="padding: 6px 16px; font-size: 12px; font-weight: bold; cursor: pointer; border: 1px solid #000; border-radius: 4px;">Imprimir Agora</button>
-  </div>
-</body>
-</html>`;
-
-  const win = window.open('', '_blank', 'width=450,height=650');
-  if (win) {
-    win.document.open();
-    win.document.write(cupomHtml);
-    win.document.close();
-    setTimeout(() => {
-      win.focus();
-      win.print();
-    }, 350);
-  } else {
-    const printArea = document.getElementById('print-fechamento-area');
-    if (printArea) {
-      printArea.innerHTML = cupomHtml;
-      window.print();
-    }
+  const printArea = document.getElementById('print-fechamento-area');
+  if (printArea) {
+    printArea.innerHTML = cupomConteudo;
   }
+  window.print();
 }
 
 function imprimirFechamentoCaixa() {
@@ -3671,7 +3630,10 @@ function renderBarbeiros() {
   let html = '';
   barbeiros.forEach(b => {
     const sal = calcularSaldoBarbeiro(b.id);
-    const zapLink = b.telefone ? `https://wa.me/55${limparTelefone(b.telefone)}` : null;
+    const gasUrl = getGASUrl();
+    const appUrlBarbeiro = gasUrl ? `https://saas-gestao-barbearia.vercel.app/?api=${encodeURIComponent(gasUrl)}` : 'https://saas-gestao-barbearia.vercel.app/';
+    const msgBarbeiro = `Olá ${b.nome}! Acesse seu aplicativo de barbeiro pelo link: ${appUrlBarbeiro}\nSeu login: ${b.login}\nSenha inicial: abc123`;
+    const zapLink = b.telefone ? `https://wa.me/55${limparTelefone(b.telefone)}?text=${encodeURIComponent(msgBarbeiro)}` : null;
 
     html += `
       <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5 shadow-sm flex flex-col justify-between hover:border-gold-500/40 transition-all">
@@ -4782,9 +4744,17 @@ function formatarMoeda(valor) {
 function formatarDataPt(dataStr) {
   if (!dataStr) return '--/--';
   const limpo = String(dataStr).trim().split('T')[0].split(' ')[0];
+  if (limpo.includes('/')) {
+    const p = limpo.split('/');
+    if (p.length === 3) {
+      if (p[0].length === 4) return `${p[2].padStart(2, '0')}/${p[1].padStart(2, '0')}/${p[0]}`;
+      return `${p[0].padStart(2, '0')}/${p[1].padStart(2, '0')}/${p[2].substring(0, 4)}`;
+    }
+    return limpo;
+  }
   const partes = limpo.split('-');
   if (partes.length === 3) {
-    const dia = partes[2].substring(0, 2);
+    const dia = partes[2].substring(0, 2).padStart(2, '0');
     const mes = partes[1].padStart(2, '0');
     const ano = partes[0];
     return `${dia}/${mes}/${ano}`;
@@ -5018,8 +4988,8 @@ async function renderMasterView() {
 
   barbearias.forEach(b => {
     const isBloqueada = b.status_licenca === 'BLOQUEADA';
-    const vencLimpo = b.data_vencimento ? String(b.data_vencimento).trim().split('T')[0].split(' ')[0] : '';
-    const isVencida = vencLimpo && vencLimpo < hoje;
+    const vencYMD = extrairDataYMD(b.data_vencimento);
+    const isVencida = vencYMD && vencYMD < hoje;
     if (isBloqueada || isVencida) {
       bloqueadasOuVencidas++;
     } else {
@@ -5050,8 +5020,8 @@ async function renderMasterView() {
     if (!matchSearch) return false;
 
     const isBloqueada = b.status_licenca === 'BLOQUEADA';
-    const vencLimpo = b.data_vencimento ? String(b.data_vencimento).trim().split('T')[0].split(' ')[0] : '';
-    const isVencida = vencLimpo && vencLimpo < hoje;
+    const vencYMD = extrairDataYMD(b.data_vencimento);
+    const isVencida = vencYMD && vencYMD < hoje;
 
     if (currentMasterStatusFilter === 'em_dia') return !isBloqueada && !isVencida;
     if (currentMasterStatusFilter === 'vencidas') return isVencida;
@@ -5075,30 +5045,36 @@ async function renderMasterView() {
   let html = '';
   filtradas.forEach(b => {
     const isBloqueada = b.status_licenca === 'BLOQUEADA';
-    const vencLimpo = b.data_vencimento ? String(b.data_vencimento).trim().split('T')[0].split(' ')[0] : '';
-    const isVencida = vencLimpo && vencLimpo < hoje;
+    const vencYMD = extrairDataYMD(b.data_vencimento);
+    const isVencida = vencYMD && vencYMD < hoje;
     
     // Cálculo de dias restantes / atraso sem horário (elimina NaN)
     let vencBadge = '';
-    if (vencLimpo) {
-      const diffMs = new Date(vencLimpo + 'T23:59:59') - new Date();
-      const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    if (vencYMD) {
+      const p = vencYMD.split('-');
+      if (p.length === 3) {
+        const dtVenc = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10), 23, 59, 59);
+        const diffMs = dtVenc - new Date();
+        const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-      if (isNaN(diffDias)) {
-        vencBadge = '';
-      } else if (diffDias < 0) {
-        vencBadge = `<span class="bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2 py-0.5 rounded-full text-[10px] font-extrabold block mt-0.5">VENCIDA HÁ ${Math.abs(diffDias)} DIAS</span>`;
-      } else if (diffDias === 0) {
-        vencBadge = `<span class="bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded-full text-[10px] font-extrabold block mt-0.5">VENCE HOJE</span>`;
-      } else if (diffDias <= 5) {
-        vencBadge = `<span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold block mt-0.5">Vence em ${diffDias} dias</span>`;
-      } else {
-        vencBadge = `<span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold block mt-0.5">Vence em ${diffDias} dias</span>`;
+        if (!isNaN(diffDias)) {
+          if (diffDias < 0) {
+            vencBadge = `<span class="bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2 py-0.5 rounded-full text-[10px] font-extrabold block mt-0.5">VENCIDA HÁ ${Math.abs(diffDias)} DIAS</span>`;
+          } else if (diffDias === 0) {
+            vencBadge = `<span class="bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded-full text-[10px] font-extrabold block mt-0.5">VENCE HOJE</span>`;
+          } else if (diffDias <= 5) {
+            vencBadge = `<span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold block mt-0.5">Vence em ${diffDias} dias</span>`;
+          } else {
+            vencBadge = `<span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold block mt-0.5">Vence em ${diffDias} dias</span>`;
+          }
+        }
       }
     }
 
     const zapLimpo = limparTelefone(b.telefone);
-    const zapLink = zapLimpo ? `https://wa.me/55${zapLimpo}?text=Ol%C3%A1%20${encodeURIComponent(b.responsavel || b.nome_barbearia)},%20sou%20Rafael%20Martins%20do%20sistema%20SaaS%20de%20Barbearia.` : '#';
+    const apiUrlGestor = b.api_url ? `https://saas-gestao-barbearia.vercel.app/?api=${encodeURIComponent(b.api_url)}` : 'https://saas-gestao-barbearia.vercel.app/';
+    const msgGestor = `Olá ${b.responsavel || b.nome_barbearia}! Acesse o sistema da sua barbearia pelo link: ${apiUrlGestor}\nSeu login: ${b.login_gestor}\nSenha inicial: ${b.senha_gestor || 'abc123'}`;
+    const zapLink = zapLimpo ? `https://wa.me/55${zapLimpo}?text=${encodeURIComponent(msgGestor)}` : '#';
 
     html += `
       <tr class="hover:bg-dark-800/60 transition-colors">
