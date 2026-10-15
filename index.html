@@ -271,17 +271,15 @@
     <!-- Conteúdo Master -->
     <main class="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto space-y-6">
       
-      <!-- Abas de Navegação do Painel Master -->
-      <div class="flex items-center gap-2 border-b border-dark-700/80 pb-3">
-        <button id="master-tab-barbearias" onclick="switchMasterTab('barbearias')" class="bg-gold-500 text-dark-900 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-md transition-all">
-          <i data-lucide="building-2" class="w-4 h-4"></i>
-          <span>Barbearias & Assinaturas</span>
-        </button>
-        <button id="master-tab-suporte" onclick="switchMasterTab('suporte')" class="bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 font-semibold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all">
-          <i data-lucide="headphones" class="w-4 h-4 text-gold-400"></i>
-          <span>Suporte & Chave PIX</span>
-          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-        </button>
+      <!-- Identificação da Seção Master -->
+      <div class="flex items-center justify-between border-b border-dark-700/80 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="bg-gold-500 text-dark-900 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-2 shadow-md">
+            <i data-lucide="building-2" class="w-4 h-4"></i>
+            <span>Barbearias & Assinaturas</span>
+          </span>
+          <span class="text-xs text-slate-400 hidden sm:inline">Gestão Global das Barbearias e Licenças SaaS</span>
+        </div>
       </div>
 
       <!-- SEÇÃO 1: Barbearias & Assinaturas -->
@@ -392,121 +390,6 @@
 
       </div> <!-- Fim de master-section-barbearias -->
 
-      <!-- SEÇÃO 2: Suporte & Chave PIX (Rafael Martins) -->
-      <div id="master-section-suporte" class="hidden space-y-6">
-        
-        <!-- Header da Seção de Suporte -->
-        <div class="bg-gradient-to-r from-dark-800 via-dark-850 to-dark-800 border border-gold-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-          <div class="absolute -right-10 -bottom-10 w-44 h-44 bg-gold-500/5 rounded-full blur-2xl pointer-events-none"></div>
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
-            <div class="flex items-center gap-4">
-              <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-gold-500 to-amber-600 p-0.5 shadow-lg shadow-gold-500/20 shrink-0">
-                <div class="w-full h-full bg-dark-950 rounded-[14px] flex items-center justify-center">
-                  <i data-lucide="shield-check" class="w-7 h-7 text-gold-400"></i>
-                </div>
-              </div>
-              <div>
-                <span class="text-[10px] uppercase font-black tracking-widest text-gold-400 bg-gold-500/10 border border-gold-500/30 px-2.5 py-0.5 rounded-full">Oficial SaaS Master</span>
-                <h2 class="text-xl font-black text-white mt-1">Central de Atendimento & Chave PIX</h2>
-                <p class="text-xs text-slate-400 mt-0.5">Canais diretos para atendimento às barbearias clientes, recebimento de mensalidades e suporte técnico.</p>
-              </div>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>Suporte Online</span>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Grid de 2 Cards Principais: Telefone/WhatsApp e Chave PIX -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          <!-- Card 1: WhatsApp & Telefone de Suporte -->
-          <div class="bg-dark-800 border-2 border-emerald-500/40 rounded-3xl p-6 sm:p-7 shadow-xl relative flex flex-col justify-between space-y-5 bg-gradient-to-b from-emerald-500/5 to-transparent">
-            <div>
-              <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-3">
-                  <div class="w-11 h-11 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shadow-md">
-                    <i data-lucide="message-square" class="w-5 h-5"></i>
-                  </div>
-                  <div>
-                    <h3 class="text-base font-bold text-white">Telefone & WhatsApp de Suporte</h3>
-                    <p class="text-xs text-slate-400">Atendimento aos gestores das barbearias</p>
-                  </div>
-                </div>
-                <span class="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded-full">Ativo</span>
-              </div>
-
-              <!-- Destaque do Número de Telefone -->
-              <div class="bg-dark-900/90 border border-dark-700 rounded-2xl p-4 flex items-center justify-between">
-                <div>
-                  <span class="text-[11px] text-slate-400 block font-medium">WhatsApp / Telefone Direto:</span>
-                  <strong class="text-xl sm:text-2xl font-black font-mono text-emerald-400 tracking-wide">(31) 98620-3735</strong>
-                </div>
-                <button type="button" onclick="copiarTextoParaClipboard('31986203735', 'Telefone copiado!')" class="bg-dark-800 hover:bg-dark-700 text-slate-200 border border-dark-700 px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all" title="Copiar número para área de transferência">
-                  <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-                  <span>Copiar</span>
-                </button>
-              </div>
-            </div>
-
-            <div class="space-y-3 pt-2">
-              <a href="https://wa.me/5531986203735" target="_blank" rel="noopener noreferrer" class="w-full bg-emerald-500 hover:bg-emerald-400 text-dark-900 font-bold py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 text-xs">
-                <i data-lucide="send" class="w-4 h-4"></i>
-                <span>Abrir Conversa no WhatsApp Web / App</span>
-              </a>
-              <p class="text-[11px] text-slate-400 text-center">Este mesmo número é exibido na tela de aviso caso a barbearia esteja bloqueada por atraso de assinatura.</p>
-            </div>
-          </div>
-
-          <!-- Card 2: Chave PIX Oficial -->
-          <div class="bg-dark-800 border-2 border-gold-500/40 rounded-3xl p-6 sm:p-7 shadow-xl relative flex flex-col justify-between space-y-5 bg-gradient-to-b from-gold-500/5 to-transparent">
-            <div>
-              <div class="flex items-center justify-between mb-4">
-                <div class="flex items-center gap-3">
-                  <div class="w-11 h-11 rounded-2xl bg-gold-500/10 border border-gold-500/30 text-gold-400 flex items-center justify-center shadow-md">
-                    <i data-lucide="wallet" class="w-5 h-5"></i>
-                  </div>
-                  <div>
-                    <h3 class="text-base font-bold text-white">Chave PIX Oficial SaaS</h3>
-                    <p class="text-xs text-slate-400">Recebimento de mensalidades e assinaturas</p>
-                  </div>
-                </div>
-                <span class="text-[10px] font-black uppercase tracking-wider bg-gold-500/20 text-gold-400 border border-gold-500/40 px-2 py-0.5 rounded-full">Exclusivo PIX</span>
-              </div>
-
-              <!-- Destaque da Chave PIX -->
-              <div class="bg-dark-900/90 border border-gold-500/40 rounded-2xl p-4 flex items-center justify-between">
-                <div>
-                  <span class="text-[11px] text-slate-400 block font-medium">Chave PIX (Telefone/Celular):</span>
-                  <strong class="text-xl sm:text-2xl font-black font-mono text-gold-400 tracking-wider">31986203735</strong>
-                  <span class="text-[11px] text-slate-400 block mt-0.5">Favorecido: <strong class="text-white">Rafael Martins</strong></span>
-                </div>
-                <button type="button" onclick="copiarTextoParaClipboard('31986203735', 'Chave PIX copiada!')" class="bg-gold-500 hover:bg-gold-400 text-dark-900 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow transition-all" title="Copiar chave PIX para colar no aplicativo do seu banco">
-                  <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-                  <span>Copiar PIX</span>
-                </button>
-              </div>
-            </div>
-
-            <div class="bg-dark-900/70 border border-dark-700 p-3.5 rounded-xl text-[11px] text-slate-300 space-y-1">
-              <div class="flex items-center gap-2 font-semibold text-gold-400">
-                <i data-lucide="info" class="w-3.5 h-3.5"></i>
-                <span>Como orientar o gestor da barbearia:</span>
-              </div>
-              <p class="text-slate-400 leading-relaxed">
-                1. O gestor da barbearia realiza a transferência PIX para a chave <code class="text-gold-300 font-mono">31986203735</code>.<br>
-                2. Envia o comprovante para seu WhatsApp <code class="text-emerald-400 font-mono">(31) 98620-3735</code>.<br>
-                3. Na aba <strong>Barbearias</strong> deste Painel Master, você clica no botão <strong>"Renovar PIX"</strong> para estender a data de vencimento da barbearia.
-              </p>
-            </div>
-          </div>
-
-        </div>
-
-      </div> <!-- Fim de master-section-suporte -->
 
     </main>
 
@@ -1398,26 +1281,82 @@
             </div>
 
             <!-- SEÇÃO: STATUS DA LICENÇA SAAS -->
-            <div class="pt-6 border-t border-dark-700/70">
+            <div class="pt-6 border-t border-dark-700/70 space-y-4">
               <div class="flex items-center justify-between">
                 <div>
                   <h3 class="text-sm font-bold text-white flex items-center gap-2">
                     <i data-lucide="award" class="w-4 h-4 text-gold-500"></i>
                     <span>Licença & Assinatura SaaS</span>
                   </h3>
-                  <p class="text-xs text-slate-400 mt-0.5">Status da assinatura desta barbearia no plano mensal.</p>
+                  <p class="text-xs text-slate-400 mt-0.5">Status da assinatura desta barbearia, canais de suporte e pagamento de mensalidade.</p>
                 </div>
                 <span id="badge-status-licenca" class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                   LICENÇA ATIVA
                 </span>
               </div>
-              <div class="mt-3 bg-dark-900/60 p-3.5 rounded-xl border border-dark-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <span class="text-slate-300">Suporte Técnico Comercial: <strong id="texto-suporte-saas" class="text-gold-400">(31) 98620-3735</strong></span>
-                <a id="link-whatsapp-suporte" href="https://wa.me/5531986203735" target="_blank" class="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 underline font-semibold">
-                  <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
-                  <span>Falar com Administrador SaaS (Rafael Martins)</span>
-                </a>
+
+              <!-- Grid de Atendimento e Chave PIX da Assinatura -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                <!-- Card 1: Suporte Técnico & WhatsApp -->
+                <div class="bg-dark-900/80 border border-dark-700 hover:border-emerald-500/40 rounded-2xl p-4 flex flex-col justify-between space-y-3 transition-colors">
+                  <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                        <i data-lucide="message-square" class="w-4 h-4"></i>
+                      </div>
+                      <div>
+                        <span class="text-xs font-bold text-white block">Suporte Técnico & Comercial</span>
+                        <span class="text-[11px] text-slate-400">Atendimento direto com Rafael Martins</span>
+                      </div>
+                    </div>
+                    <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">Online</span>
+                  </div>
+
+                  <div class="bg-dark-850 p-2.5 rounded-xl border border-dark-700/80 flex items-center justify-between">
+                    <div>
+                      <span class="text-[10px] text-slate-400 block font-medium">WhatsApp Oficial:</span>
+                      <strong id="texto-suporte-saas" class="text-sm font-black font-mono text-emerald-400">(31) 98620-3735</strong>
+                    </div>
+                    <a id="link-whatsapp-suporte" href="https://wa.me/5531986203735?text=Ol%C3%A1%2C%20preciso%20de%20suporte%20no%20sistema%20da%20barbearia" target="_blank" class="bg-emerald-500 hover:bg-emerald-400 text-dark-900 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm">
+                      <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                      <span>Abrir WhatsApp</span>
+                    </a>
+                  </div>
+                </div>
+
+                <!-- Card 2: Chave PIX para Pagamento de Mensalidade -->
+                <div class="bg-dark-900/80 border border-dark-700 hover:border-gold-500/40 rounded-2xl p-4 flex flex-col justify-between space-y-3 transition-colors">
+                  <div class="flex items-start justify-between">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-9 h-9 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-400 flex items-center justify-center shrink-0">
+                        <i data-lucide="wallet" class="w-4 h-4"></i>
+                      </div>
+                      <div>
+                        <span class="text-xs font-bold text-white block">Pagamento de Mensalidade (PIX)</span>
+                        <span class="text-[11px] text-slate-400">Favorecido: Rafael Martins</span>
+                      </div>
+                    </div>
+                    <span class="text-[10px] font-bold text-gold-400 bg-gold-500/10 border border-gold-500/30 px-2 py-0.5 rounded-full">Chave Celular</span>
+                  </div>
+
+                  <div class="bg-dark-850 p-2.5 rounded-xl border border-gold-500/30 flex items-center justify-between">
+                    <div>
+                      <span class="text-[10px] text-slate-400 block font-medium">Chave PIX:</span>
+                      <strong class="text-sm font-black font-mono text-gold-400 tracking-wider">31986203735</strong>
+                    </div>
+                    <button type="button" onclick="copiarTextoParaClipboard('31986203735', 'Chave PIX copiada!')" class="bg-gold-500 hover:bg-gold-400 text-dark-900 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm" title="Copiar Chave PIX">
+                      <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                      <span>Copiar PIX</span>
+                    </button>
+                  </div>
+                </div>
+
               </div>
+
+              <p class="text-[11px] text-slate-500 italic">
+                * Para renovação mensal do plano, realize o pagamento para a chave PIX acima e envie o comprovante para o WhatsApp de suporte.
+              </p>
             </div>
 
             <!-- SEÇÃO: CONEXÃO COM GOOGLE PLANILHAS & BACKUP NO DRIVE -->
@@ -1757,7 +1696,7 @@
 
   <!-- MODAL: FINALIZAR ATENDIMENTO (COMANDA CONJUNTA: SERVIÇO + PRODUTOS CONSUMIDOS) -->
   <div id="modal-finalizar-atendimento" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-3 sm:p-4">
-    <div class="bg-dark-800 border border-gold-500/40 rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl relative slide-down max-h-[92vh] overflow-y-auto">
+    <div class="bg-dark-800 border border-gold-500/40 rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl relative slide-down max-h-[92vh] overflow-y-auto overflow-x-hidden">
       <div class="flex items-center justify-between border-b border-dark-700 pb-3 mb-4">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
           <i data-lucide="receipt" class="w-5 h-5 text-gold-500"></i>
@@ -1801,14 +1740,14 @@
             <span class="text-[10px] text-slate-500">Baixa automática no estoque</span>
           </div>
 
-          <div class="flex gap-2">
-            <select id="finalizar-produto-select" class="flex-1 bg-dark-800 border border-dark-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-gold-500">
+          <div class="flex items-center gap-2 w-full mt-2">
+            <select id="finalizar-produto-select" class="flex-1 min-w-0 text-sm bg-dark-800 border border-dark-700 rounded-xl px-2.5 py-2 text-white focus:outline-none focus:border-gold-500 truncate">
               <option value="">Selecione um produto para adicionar...</option>
             </select>
-            <input type="number" id="finalizar-produto-qtd" min="1" value="1" class="w-16 bg-dark-800 border border-dark-700 rounded-xl px-2 py-2 text-xs text-white text-center focus:outline-none focus:border-gold-500" title="Quantidade">
-            <button type="button" onclick="adicionarProdutoComanda()" class="bg-dark-700 hover:bg-gold-500 hover:text-dark-900 text-gold-400 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1 transition-all shrink-0">
+            <input type="number" id="finalizar-produto-qtd" min="1" value="1" class="w-12 text-center text-sm shrink-0 bg-dark-800 border border-dark-700 rounded-xl px-1 py-2 text-white focus:outline-none focus:border-gold-500" title="Quantidade">
+            <button type="button" onclick="adicionarProdutoComanda()" class="shrink-0 px-3 py-2 text-xs font-semibold whitespace-nowrap bg-dark-700 hover:bg-gold-500 hover:text-dark-900 text-gold-400 rounded-xl flex items-center gap-1.5 transition-all">
               <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-              <span>Adicionar</span>
+              <span>+ Adicionar</span>
             </button>
           </div>
 
@@ -1879,6 +1818,11 @@
               <span id="finalizar-tag-prazo-credito" class="text-[10px] text-slate-400 block">Compensação em D+30 dias</span>
             </button>
           </div>
+
+          <!-- Botão de Cancelamento de Agendamento na Comanda -->
+          <button type="button" onclick="handleCancelarAgendamentoModal()" class="w-full mt-4 py-2.5 px-4 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500 transition-all text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2">
+            <span>✕</span> Cancelar Agendamento
+          </button>
         </div>
       </div>
     </div>

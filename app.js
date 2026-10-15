@@ -1640,12 +1640,12 @@ function updateUIBranding() {
   }
 
   // Atualiza links e contatos de suporte SaaS
-  const zapSuporte = (cfg.suporte_whatsapp || '5531986203735').replace(/\D/g, '');
+  const zapSuporte = '5531986203735';
   const elTextoSuporte = document.getElementById('texto-suporte-saas');
-  if (elTextoSuporte) elTextoSuporte.textContent = cfg.telefone_barbearia || '(31) 98620-3735';
+  if (elTextoSuporte) elTextoSuporte.textContent = '(31) 98620-3735';
 
   const linkSuporte = document.getElementById('link-whatsapp-suporte');
-  if (linkSuporte) linkSuporte.href = `https://wa.me/${zapSuporte}?text=${encodeURIComponent('Olá, suporte SaaS Barbearia! Preciso de auxílio.')}`;
+  if (linkSuporte) linkSuporte.href = `https://wa.me/${zapSuporte}?text=${encodeURIComponent('Olá, preciso de suporte no sistema da barbearia')}`;
 
   const inputGasUrl = document.getElementById('config-gas-url');
   if (inputGasUrl) inputGasUrl.value = getGASUrl();
@@ -2679,6 +2679,32 @@ async function cancelarAgendamento(agendamentoId) {
     renderGestorView();
   } else {
     showToast(res ? res.error : 'Erro ao cancelar.', 'error');
+  }
+}
+
+async function handleCancelarAgendamentoModal(agendamentoId) {
+  const agdId = agendamentoId || document.getElementById('finalizar-agendamento-id')?.value;
+  if (!agdId) {
+    showToast('Nenhum agendamento selecionado.', 'warning');
+    return;
+  }
+
+  if (!confirm('Deseja realmente cancelar este agendamento?')) return;
+
+  closeModal('modal-finalizar-atendimento');
+
+  const res = await callGAS('updateAgendamentoStatus', {
+    id: agdId,
+    status: 'Cancelado',
+    forma_pagamento: 'Cancelado'
+  });
+
+  if (res && res.success) {
+    showToast('Agendamento cancelado com sucesso!', 'info');
+    await refreshData(true);
+    renderGestorView();
+  } else {
+    showToast(res ? res.error : 'Erro ao cancelar agendamento.', 'error');
   }
 }
 
@@ -4799,31 +4825,9 @@ function previewLoginGestor(nome) {
 
 function switchMasterTab(tab) {
   const secBarbearias = document.getElementById('master-section-barbearias');
+  if (secBarbearias) secBarbearias.classList.remove('hidden');
   const secSuporte = document.getElementById('master-section-suporte');
-  const btnBarbearias = document.getElementById('master-tab-barbearias');
-  const btnSuporte = document.getElementById('master-tab-suporte');
-
-  if (tab === 'suporte') {
-    if (secBarbearias) secBarbearias.classList.add('hidden');
-    if (secSuporte) secSuporte.classList.remove('hidden');
-
-    if (btnSuporte) {
-      btnSuporte.className = 'bg-gold-500 text-dark-900 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-md transition-all';
-    }
-    if (btnBarbearias) {
-      btnBarbearias.className = 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 font-semibold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all';
-    }
-  } else {
-    if (secBarbearias) secBarbearias.classList.remove('hidden');
-    if (secSuporte) secSuporte.classList.add('hidden');
-
-    if (btnBarbearias) {
-      btnBarbearias.className = 'bg-gold-500 text-dark-900 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-md transition-all';
-    }
-    if (btnSuporte) {
-      btnSuporte.className = 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 font-semibold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all';
-    }
-  }
+  if (secSuporte) secSuporte.classList.add('hidden');
 
   if (window.lucide && typeof lucide.createIcons === 'function') {
     lucide.createIcons();
