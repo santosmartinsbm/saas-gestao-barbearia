@@ -16,8 +16,7 @@ O sistema possui uma **tela de login unificada**: ao digitar as credenciais na t
 
 ### 1. Perfil Super Admin (Dono da Plataforma)
 - **Login:** `Rafael_Martins`
-- **Senha Inicial:** `RSNf14232603*`
-- **Painel:** Abre exclusivamente o **PAINEL MASTER SAAS**.
+- - **Painel:** Abre exclusivamente o **PAINEL MASTER SAAS**.
 - **Segurança:** O Super Admin pode alterar sua senha pessoal a qualquer momento no botão **"Minha Senha"** no cabeçalho do painel.
 
 ### 2. Perfis de Gestores de Barbearias
@@ -38,7 +37,6 @@ Você pode testar todo o sistema imediatamente no seu computador sem configurar 
 1. Dê um duplo clique no arquivo **`Iniciar_Sistema.bat`** (ou abra o arquivo **`index.html`** no seu navegador).
 2. **Acesso como Dono do SaaS (Super Admin):**
    - Usuário: `Rafael_Martins`
-   - Senha: `RSNf14232603*`
    - *Abre o Painel Master com métricas consolidadas, lista de barbearias e controle de assinaturas.*
 3. **Acesso como Gestor de Barbearia:**
    - Usuário: `Barbearia_VintageEstilo`
