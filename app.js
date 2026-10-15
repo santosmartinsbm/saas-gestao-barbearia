@@ -35,9 +35,9 @@ let appState = {
     usuario_gestor: 'Barbearia_VintageEstilo',
     senha_gestor: 'abc123',
     status_licenca: 'ATIVA',
-    suporte_whatsapp: '5511999999999',
-    telefone_barbearia: '(11) 98765-4321',
-    chave_pix: 'pix@barbearia.com',
+    suporte_whatsapp: '5531986203735',
+    telefone_barbearia: '(31) 98620-3735',
+    chave_pix: '31986203735',
     taxa_pix_pct: 0,
     prazo_pix_dias: 0,
     taxa_debito_pct: 1.99,
@@ -48,8 +48,8 @@ let appState = {
   masterConfig: {
     superadmin_login: 'Rafael_Martins',
     superadmin_senha: 'RSNf14232603*',
-    suporte_whatsapp: '5511999999999',
-    chave_pix: 'pix@rafaelmartins.com'
+    suporte_whatsapp: '5531986203735',
+    chave_pix: '31986203735'
   },
   masterBarbearias: [],
   isAuditMode: false,
@@ -150,9 +150,9 @@ function getDefaultMockData() {
       usuario_gestor: 'Barbearia_VintageEstilo',
       senha_gestor: 'abc123',
       status_licenca: 'ATIVA',
-      suporte_whatsapp: '5511999999999',
-      telefone_barbearia: '(11) 98765-4321',
-      chave_pix: 'pix@barbearia.com',
+      suporte_whatsapp: '5531986203735',
+      telefone_barbearia: '(31) 98620-3735',
+      chave_pix: '31986203735',
       taxa_pix_pct: 0,
       prazo_pix_dias: 0,
       taxa_debito_pct: 1.99,
@@ -163,8 +163,8 @@ function getDefaultMockData() {
     masterConfig: {
       superadmin_login: 'Rafael_Martins',
       superadmin_senha: 'RSNf14232603*',
-      suporte_whatsapp: '5511999999999',
-      chave_pix: 'pix@rafaelmartins.com'
+      suporte_whatsapp: '5531986203735',
+      chave_pix: '31986203735'
     },
     masterBarbearias: [
       {
@@ -298,6 +298,8 @@ function saveLocalData() {
   }));
 }
 
+const PERMANENT_GAS_KEY = 'barbearia_permanent_gas_url_v1';
+
 function getGASUrl() {
   // Permite configurar a barbearia automaticamente via link com parâmetro: ?api=https://script.google.com/.../exec
   if (typeof window !== 'undefined' && window.location && window.location.search) {
@@ -306,6 +308,9 @@ function getGASUrl() {
     if (apiParam && apiParam.trim().length > 10) {
       const cleanUrl = apiParam.trim();
       localStorage.setItem(GAS_URL_KEY, cleanUrl);
+      localStorage.setItem(PERMANENT_GAS_KEY, cleanUrl);
+      if (!appState.config) appState.config = {};
+      appState.config.api_url = cleanUrl;
       // Limpa o parâmetro da barra de endereços para manter a URL limpa e profissional
       if (window.history && window.history.replaceState) {
         const cleanPath = window.location.pathname + window.location.hash;
@@ -314,16 +319,86 @@ function getGASUrl() {
       return cleanUrl;
     }
   }
-  return localStorage.getItem(GAS_URL_KEY) || '';
+  const savedUrl = localStorage.getItem(GAS_URL_KEY) || localStorage.getItem(PERMANENT_GAS_KEY) || appState?.config?.api_url || '';
+  if (savedUrl && !localStorage.getItem(GAS_URL_KEY)) {
+    localStorage.setItem(GAS_URL_KEY, savedUrl);
+  }
+  return savedUrl;
 }
 
-function setGASUrl(url) {
-  if (url) {
-    localStorage.setItem(GAS_URL_KEY, url.trim());
-  } else {
+function setGASUrl(url, forceClear = false) {
+  if (url && url.trim().length > 5) {
+    const clean = url.trim();
+    localStorage.setItem(GAS_URL_KEY, clean);
+    localStorage.setItem(PERMANENT_GAS_KEY, clean);
+    if (!appState.config) appState.config = {};
+    appState.config.api_url = clean;
+    saveLocalData();
+  } else if (forceClear) {
     localStorage.removeItem(GAS_URL_KEY);
+    localStorage.removeItem(PERMANENT_GAS_KEY);
+    if (appState.config) delete appState.config.api_url;
+    saveLocalData();
   }
   updateSyncStatus();
+}
+
+function renderGasConnectionFeedback(containerId, status, message = '', details = '') {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.classList.remove('hidden');
+
+  if (status === 'loading') {
+    container.innerHTML = `
+      <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-3 text-xs text-amber-300 animate-pulse">
+        <i data-lucide="loader-2" class="w-4 h-4 animate-spin shrink-0"></i>
+        <div>
+          <span class="font-bold">Testando conexão com o Google Apps Script...</span>
+          <p class="text-[11px] text-amber-400/80">Validando resposta em tempo real da planilha.</p>
+        </div>
+      </div>
+    `;
+  } else if (status === 'success') {
+    container.innerHTML = `
+      <div class="p-3.5 bg-emerald-500/10 border-2 border-emerald-500/40 rounded-xl space-y-1.5 slide-down">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <i data-lucide="check-circle" class="w-4 h-4"></i>
+            </div>
+            <strong class="text-xs font-bold text-emerald-400">✅ Conexão Estabelecida com Sucesso!</strong>
+          </div>
+          <span class="text-[10px] uppercase font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded">Salvo Permanente</span>
+        </div>
+        <p class="text-[11px] text-slate-300 leading-relaxed pl-8">
+          A URL da sua planilha está <strong>salva e ativa de forma permanente</strong> neste navegador. Todos os dados (clientes, agendamentos, produtos, comissões e caixa) estão sincronizados em tempo real.
+        </p>
+        ${details ? `<p class="text-[10px] text-emerald-400/80 font-mono pl-8">${details}</p>` : ''}
+      </div>
+    `;
+  } else if (status === 'error') {
+    container.innerHTML = `
+      <div class="p-3.5 bg-rose-500/10 border-2 border-rose-500/40 rounded-xl space-y-1.5 slide-down">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+            <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+          </div>
+          <strong class="text-xs font-bold text-rose-400">❌ Falha ao Conectar com a Planilha!</strong>
+        </div>
+        <p class="text-[11px] text-slate-300 leading-relaxed pl-8">
+          ${message || 'Não foi possível se comunicar com o Google Apps Script.'}
+        </p>
+        <div class="pl-8 text-[11px] text-rose-300/80 space-y-0.5">
+          <p>• Verifique se a URL termina com <code class="bg-rose-950/60 px-1 py-0.5 rounded font-mono">/exec</code>.</p>
+          <p>• No Apps Script, confirme se em <em>Implantar &gt; Quem pode acessar</em> está selecionado <strong>"Qualquer pessoa"</strong> (Anyone).</p>
+        </div>
+      </div>
+    `;
+  }
+  if (window.lucide && typeof lucide.createIcons === 'function') {
+    lucide.createIcons();
+  }
 }
 
 function updateSyncStatus() {
@@ -338,11 +413,14 @@ function updateSyncStatus() {
     if (loginText) loginText.textContent = 'Google Planilhas Conectado';
     if (gestorDot) gestorDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
     if (gestorText) gestorText.textContent = 'Sheets Conectado';
+    renderGasConnectionFeedback('config-gas-status-feedback', 'success');
   } else {
     if (loginDot) loginDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 pulse-dot';
     if (loginText) loginText.textContent = 'Modo Demonstração (Local)';
     if (gestorDot) gestorDot.className = 'w-2 h-2 rounded-full bg-amber-500';
     if (gestorText) gestorText.textContent = 'Modo Demo (Local)';
+    const fb = document.getElementById('config-gas-status-feedback');
+    if (fb) fb.classList.add('hidden');
   }
 }
 
@@ -637,7 +715,7 @@ function handleLocalAction(action, payload) {
             bloqueado: true,
             motivo: 'bloqueada',
             nome_barbearia: barbEncontrada.nome_barbearia,
-            suporte_whatsapp: appState.masterConfig?.suporte_whatsapp || '5511999999999',
+            suporte_whatsapp: appState.masterConfig?.suporte_whatsapp || '5531986203735',
             error: 'Acesso suspenso pelo administrador do sistema. Contate Rafael Martins para regularização via PIX.'
           };
         }
@@ -649,7 +727,7 @@ function handleLocalAction(action, payload) {
             motivo: 'vencida',
             data_vencimento: barbEncontrada.data_vencimento,
             nome_barbearia: barbEncontrada.nome_barbearia,
-            suporte_whatsapp: appState.masterConfig?.suporte_whatsapp || '5511999999999',
+            suporte_whatsapp: appState.masterConfig?.suporte_whatsapp || '5531986203735',
             error: `Assinatura vencida em ${barbEncontrada.data_vencimento}. Renove via PIX com Rafael Martins.`
           };
         }
@@ -1144,6 +1222,11 @@ async function handleLoginGestor(event) {
 
     // 2. Verificação de Primeiro Acesso com a senha padrão 'abc123'
     if (res.primeiroAcessoGestor || senha === 'abc123') {
+      window.pendingGestorAuth = {
+        usuario: res.usuario || usuario,
+        barbearia_id: res.barbearia_id || '',
+        nome_barbearia: res.nome_barbearia || ''
+      };
       openModal('modal-primeiro-acesso-gestor');
       return;
     }
@@ -1189,12 +1272,18 @@ async function handleSalvarPrimeiroAcessoGestor(event) {
   const submitBtn = event.target.querySelector('button[type="submit"]');
   setButtonLoading(submitBtn, true, 'Salvando nova senha...');
 
-  const usuario = document.getElementById('input-usuario-gestor')?.value.trim() || '';
+  const pending = window.pendingGestorAuth || {};
+  const usuario = pending.usuario || (document.getElementById('input-usuario-gestor')?.value.trim() || '');
+  const barbeariaId = pending.barbearia_id || '';
+  const nomeBarbearia = pending.nome_barbearia || '';
+
   const res = await callGAS('alterarSenhaGestor', {
     senhaAtual: 'abc123',
+    senha_atual: 'abc123',
     novaSenha: s1,
+    nova_senha: s1,
     force: true,
-    barbearia_id: currentSession?.barbearia_id || '',
+    barbearia_id: barbeariaId,
     login_gestor: usuario
   });
   setButtonLoading(submitBtn, false);
@@ -1202,10 +1291,25 @@ async function handleSalvarPrimeiroAcessoGestor(event) {
   if (res && res.success) {
     closeModal('modal-primeiro-acesso-gestor');
     appState.config.senha_gestor = s1;
+    if (nomeBarbearia) {
+      appState.config.nome_barbearia = nomeBarbearia;
+    }
+    if (appState.masterBarbearias) {
+      const b = appState.masterBarbearias.find(x =>
+        (barbeariaId && x.id === barbeariaId) ||
+        (usuario && String(x.login_gestor).toLowerCase() === usuario.toLowerCase())
+      );
+      if (b) b.senha_gestor = s1;
+    }
     saveLocalData();
     showToast('Senha pessoal do gestor cadastrada com sucesso! Bem-vindo.', 'success');
 
-    currentSession = { perfil: 'gestor', usuario: usuario };
+    currentSession = {
+      perfil: 'gestor',
+      barbearia_id: barbeariaId,
+      nome_barbearia: nomeBarbearia || appState.config.nome_barbearia || '',
+      usuario: usuario
+    };
     localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
     showView('gestor');
     renderGestorView();
@@ -1262,7 +1366,7 @@ function exibirTelaBloqueioSaaS(bloqueioInfo) {
 
   const btnWhats = document.getElementById('btn-whatsapp-bloqueio');
   if (btnWhats) {
-    const zap = (bloqueioInfo?.suporte_whatsapp || appState.masterConfig?.suporte_whatsapp || cfg.suporte_whatsapp || '5511999999999').replace(/\D/g, '');
+    const zap = (bloqueioInfo?.suporte_whatsapp || appState.masterConfig?.suporte_whatsapp || cfg.suporte_whatsapp || '5531986203735').replace(/\D/g, '');
     const txt = encodeURIComponent(`Olá Rafael Martins, sou da barbearia "${nomeBarb}" e gostaria de regularizar/renovar minha assinatura do sistema via PIX.`);
     btnWhats.href = `https://wa.me/${zap}?text=${txt}`;
   }
@@ -1523,9 +1627,9 @@ function updateUIBranding() {
   }
 
   // Atualiza links e contatos de suporte SaaS
-  const zapSuporte = (cfg.suporte_whatsapp || '5511999999999').replace(/\D/g, '');
+  const zapSuporte = (cfg.suporte_whatsapp || '5531986203735').replace(/\D/g, '');
   const elTextoSuporte = document.getElementById('texto-suporte-saas');
-  if (elTextoSuporte) elTextoSuporte.textContent = cfg.suporte_whatsapp || '(11) 99999-9999';
+  if (elTextoSuporte) elTextoSuporte.textContent = cfg.telefone_barbearia || '(31) 98620-3735';
 
   const linkSuporte = document.getElementById('link-whatsapp-suporte');
   if (linkSuporte) linkSuporte.href = `https://wa.me/${zapSuporte}?text=${encodeURIComponent('Olá, suporte SaaS Barbearia! Preciso de auxílio.')}`;
@@ -3957,26 +4061,72 @@ async function handleSalvarConfiguracoes(event) {
 }
 
 async function testGASConnection() {
-  const url = document.getElementById('config-gas-url').value.trim();
+  const input = document.getElementById('config-gas-url');
+  const url = input ? input.value.trim() : '';
   if (!url) {
     showToast('Informe a URL do Google Apps Script para testar.', 'error');
+    renderGasConnectionFeedback('config-gas-status-feedback', 'error', 'Nenhuma URL informada. Cole o link do seu Web App publicado no Google Apps Script.');
     return;
   }
 
   showToast('Testando conexão com a planilha...', 'info');
+  renderGasConnectionFeedback('config-gas-status-feedback', 'loading');
   setGlobalLoading(true);
+
   try {
-    const resp = await fetch(url + '?action=ping');
+    const pingUrl = url + (url.includes('?') ? '&' : '?') + 'action=ping&_t=' + Date.now();
+    const resp = await fetch(pingUrl, { method: 'GET', mode: 'cors' });
     const json = await resp.json();
     setGlobalLoading(false);
+
     if (json && json.success) {
-      showToast('Conexão de alta performance com Google Planilhas confirmada!', 'success');
+      setGASUrl(url); // Persiste de forma fixa e permanente!
+      renderGasConnectionFeedback('config-gas-status-feedback', 'success', '', `Latência: OK | Resposta do Google: Conexão ativa às ${new Date().toLocaleTimeString('pt-BR')}`);
+      showToast('Conexão com Google Planilhas confirmada e salva de forma permanente!', 'success');
+      refreshData(true);
     } else {
-      showToast('Resposta recebida com aviso: ' + (json.error || 'Desconhecido'), 'error');
+      renderGasConnectionFeedback('config-gas-status-feedback', 'error', json ? json.error : 'O Google Apps Script retornou uma resposta inesperada.');
+      showToast('Resposta recebida com aviso do Google: ' + (json?.error || 'Aviso'), 'error');
     }
   } catch (e) {
     setGlobalLoading(false);
+    renderGasConnectionFeedback('config-gas-status-feedback', 'error', 'Erro de rede ou permissão. O navegador não conseguiu se comunicar com a URL fornecida.');
     showToast('Não foi possível conectar. Verifique se o Web App foi publicado com acesso "Qualquer pessoa".', 'error');
+  }
+}
+
+async function testGASConnectionModal() {
+  const input = document.getElementById('modal-sheets-url');
+  const url = input ? input.value.trim() : '';
+  if (!url) {
+    showToast('Informe a URL do Web App para testar.', 'error');
+    renderGasConnectionFeedback('modal-gas-status-feedback', 'error', 'Informe a URL do Web App.');
+    return;
+  }
+
+  renderGasConnectionFeedback('modal-gas-status-feedback', 'loading');
+  setGlobalLoading(true);
+
+  try {
+    const pingUrl = url + (url.includes('?') ? '&' : '?') + 'action=ping&_t=' + Date.now();
+    const resp = await fetch(pingUrl, { method: 'GET', mode: 'cors' });
+    const json = await resp.json();
+    setGlobalLoading(false);
+
+    if (json && json.success) {
+      setGASUrl(url); // Salva permanente!
+      renderGasConnectionFeedback('modal-gas-status-feedback', 'success', '', `Conexão validada às ${new Date().toLocaleTimeString('pt-BR')}`);
+      showToast('Conexão com a planilha confirmada e salva!', 'success');
+      const cfgInput = document.getElementById('config-gas-url');
+      if (cfgInput) cfgInput.value = url;
+    } else {
+      renderGasConnectionFeedback('modal-gas-status-feedback', 'error', json ? json.error : 'Resposta inesperada.');
+      showToast('Aviso: ' + (json?.error || 'Erro'), 'error');
+    }
+  } catch (e) {
+    setGlobalLoading(false);
+    renderGasConnectionFeedback('modal-gas-status-feedback', 'error', 'Não foi possível conectar. Verifique o acesso "Qualquer pessoa" no Apps Script.');
+    showToast('Erro de conexão com o Web App.', 'error');
   }
 }
 
@@ -4519,6 +4669,68 @@ function previewLoginGestor(nome) {
   const loginGerado = gerarLoginGestorBarbearia(nome);
   const el = document.getElementById('master-preview-login');
   if (el) el.textContent = loginGerado;
+}
+
+function switchMasterTab(tab) {
+  const secBarbearias = document.getElementById('master-section-barbearias');
+  const secSuporte = document.getElementById('master-section-suporte');
+  const btnBarbearias = document.getElementById('master-tab-barbearias');
+  const btnSuporte = document.getElementById('master-tab-suporte');
+
+  if (tab === 'suporte') {
+    if (secBarbearias) secBarbearias.classList.add('hidden');
+    if (secSuporte) secSuporte.classList.remove('hidden');
+
+    if (btnSuporte) {
+      btnSuporte.className = 'bg-gold-500 text-dark-900 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-md transition-all';
+    }
+    if (btnBarbearias) {
+      btnBarbearias.className = 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 font-semibold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all';
+    }
+  } else {
+    if (secBarbearias) secBarbearias.classList.remove('hidden');
+    if (secSuporte) secSuporte.classList.add('hidden');
+
+    if (btnBarbearias) {
+      btnBarbearias.className = 'bg-gold-500 text-dark-900 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-md transition-all';
+    }
+    if (btnSuporte) {
+      btnSuporte.className = 'bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 font-semibold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all';
+    }
+  }
+
+  if (window.lucide && typeof lucide.createIcons === 'function') {
+    lucide.createIcons();
+  }
+}
+
+function copiarTextoParaClipboard(texto, mensagemSucesso = 'Copiado para a área de transferência!') {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(() => {
+      showToast(mensagemSucesso, 'success');
+    }).catch(() => {
+      copiarFallback(texto, mensagemSucesso);
+    });
+  } else {
+    copiarFallback(texto, mensagemSucesso);
+  }
+}
+
+function copiarFallback(texto, mensagemSucesso) {
+  const textArea = document.createElement('textarea');
+  textArea.value = texto;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-9999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand('copy');
+    showToast(mensagemSucesso, 'success');
+  } catch (e) {
+    prompt('Copie o texto abaixo:', texto);
+  }
+  document.body.removeChild(textArea);
 }
 
 function setMasterStatusFilter(status) {

@@ -1,0 +1,13 @@
+# Dependências e caches locais
+node_modules/
+.vercel
+.vscode/
+.idea/
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
