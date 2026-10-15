@@ -2097,8 +2097,11 @@ function renderAgendaHojeDashboard() {
 
   const hoje = getHojeString();
   const agendamentosHoje = (appState.agendamentos || [])
-    .filter(a => a.data === hoje)
-    .sort((a, b) => (a.horario || '').localeCompare(b.horario || ''));
+    .filter(a => {
+      const dLimpa = String(a.data || '').trim().split('T')[0].split(' ')[0];
+      return dLimpa === hoje;
+    })
+    .sort((a, b) => formatarHora(a.horario).localeCompare(formatarHora(b.horario)));
 
   if (agendamentosHoje.length === 0) {
     tbody.innerHTML = `
@@ -2116,7 +2119,7 @@ function renderAgendaHojeDashboard() {
     const statusBadge = getStatusBadge(a.status);
     html += `
       <tr class="hover:bg-dark-900/40 transition-colors">
-        <td class="p-3 font-bold text-white">${a.horario || '--:--'}</td>
+        <td class="p-3 font-bold text-white">${formatarHora(a.horario)}</td>
         <td class="p-3">
           <div class="font-medium text-slate-200">${a.cliente_nome}</div>
           <div class="text-[11px] text-slate-500">${a.cliente_telefone || ''}</div>
@@ -2199,7 +2202,7 @@ Aqui é da *${nomeBarbearia}*. Passando para confirmar seu horário agendado:
 
 ✂️ Serviço: *${agd.servico_nome}*
 💈 Barbeiro: *${agd.barbeiro_nome}*
-📅 Data: *${dataPt}* às *${agd.horario || '--:--'}*
+📅 Data: *${dataPt}* às *${formatarHora(agd.horario)}*
 
 Podemos confirmar o seu horário? Esperamos por você!`;
 
@@ -2218,15 +2221,20 @@ function compararAgendamentosInteligente(a, b) {
   if (isPendenteA && !isPendenteB) return -1;
   if (!isPendenteA && isPendenteB) return 1;
 
+  const dataA = String(a.data || '').trim().split('T')[0].split(' ')[0];
+  const dataB = String(b.data || '').trim().split('T')[0].split(' ')[0];
+  const horaA = formatarHora(a.horario);
+  const horaB = formatarHora(b.horario);
+
   // b) Entre os pendentes: ordem cronológica crescente (atendimento mais próximo primeiro)
   if (isPendenteA && isPendenteB) {
-    if (a.data !== b.data) return (a.data || '').localeCompare(b.data || '');
-    return (a.horario || '').localeCompare(b.horario || '');
+    if (dataA !== dataB) return dataA.localeCompare(dataB);
+    return horaA.localeCompare(horaB);
   }
 
   // c) Concluídos / Cancelados: jogados para o final, ordenados do mais recente para o mais antigo
-  if (a.data !== b.data) return (b.data || '').localeCompare(a.data || '');
-  return (b.horario || '').localeCompare(a.horario || '');
+  if (dataA !== dataB) return dataB.localeCompare(dataA);
+  return horaB.localeCompare(horaA);
 }
 
 function renderAgendamentos() {
@@ -2284,7 +2292,7 @@ function renderAgendamentos() {
       <tr class="hover:bg-dark-900/40 transition-colors">
         <td class="p-3">
           <div class="font-bold text-white">${formatarDataPt(a.data)}</div>
-          <div class="text-[11px] text-slate-400 font-mono">${a.horario || '--:--'}</div>
+          <div class="text-[11px] text-slate-400 font-mono">${formatarHora(a.horario)}</div>
         </td>
         <td class="p-3">
           <div class="font-medium text-slate-200 flex items-center gap-1.5">
@@ -3158,7 +3166,7 @@ function calcularFechamentoDiario(dataIso) {
         h += `
           <div class="flex items-center justify-between p-2 rounded-lg bg-dark-800/80 border border-dark-700/60 text-xs">
             <div class="flex items-center gap-2">
-              <span class="text-gold-400 font-mono text-[11px] font-bold">${a.horario || '--:--'}</span>
+              <span class="text-gold-400 font-mono text-[11px] font-bold">${formatarHora(a.horario)}</span>
               <div>
                 <span class="text-white font-medium">${a.servico_nome}</span>
                 <span class="text-slate-400 text-[11px]"> (${a.cliente_nome} - ${a.barbeiro_nome})</span>
@@ -3298,7 +3306,7 @@ function imprimirFechamentoCaixa() {
       servicosHtml += `
         <div style="border-bottom:1px dotted #ccc; padding:3px 0; margin-bottom:2px;">
           <div style="display:flex; justify-content:space-between;">
-            <span><strong>${a.horario || '--:--'}</strong> ${a.servico_nome} (${a.cliente_nome})</span>
+            <span><strong>${formatarHora(a.horario)}</strong> ${a.servico_nome} (${a.cliente_nome})</span>
             <span>${formatarMoeda(bruto)}</span>
           </div>
           <div style="display:flex; justify-content:space-between; font-size:9px; color:#555;">
@@ -3495,7 +3503,7 @@ function exportarFechamentoCSV(dataIso) {
       dtComp = calc.dataCompensacao;
     }
     const com = parseFloat(a.comissao_valor) || 0;
-    csv += `"${a.horario || '--:--'}";"${a.cliente_nome}";"${a.cliente_telefone || ''}";"${a.servico_nome}";"${a.barbeiro_nome}";"${formatarFormaPagamento(a.forma_pagamento)}";${bruto.toFixed(2)};${taxa.toFixed(2)};${liq.toFixed(2)};"${formatarDataPt(dtComp)}";${com.toFixed(2)}\n`;
+    csv += `"${formatarHora(a.horario)}";"${a.cliente_nome}";"${a.cliente_telefone || ''}";"${a.servico_nome}";"${a.barbeiro_nome}";"${formatarFormaPagamento(a.forma_pagamento)}";${bruto.toFixed(2)};${taxa.toFixed(2)};${liq.toFixed(2)};"${formatarDataPt(dtComp)}";${com.toFixed(2)}\n`;
   });
   csv += `\n`;
 
@@ -4347,7 +4355,7 @@ function renderBarberAgenda() {
         <div class="flex items-start justify-between">
           <div class="flex items-center gap-2">
             <span class="text-xs font-bold px-2 py-1 bg-dark-900 border border-dark-700 rounded-lg text-white font-mono">
-              ${a.horario || '--:--'}
+              ${formatarHora(a.horario)}
             </span>
             <span class="text-xs font-medium text-slate-400">
               ${formatarDataPt(a.data)}
@@ -4469,8 +4477,10 @@ function renderBarberExtrato(sal) {
   // 2. Histórico de Serviços Concluídos (Base de Cálculo das Comissões)
   const concluidos = (appState.agendamentos || []).filter(a => String(a.barbeiro_id) === String(bId) && a.status === 'Concluido');
   concluidos.sort((a, b) => {
-    if (a.data !== b.data) return (b.data || '').localeCompare(a.data || '');
-    return (b.horario || '').localeCompare(a.horario || '');
+    const dataA = String(a.data || '').trim().split('T')[0].split(' ')[0];
+    const dataB = String(b.data || '').trim().split('T')[0].split(' ')[0];
+    if (dataA !== dataB) return dataB.localeCompare(dataA);
+    return formatarHora(b.horario).localeCompare(formatarHora(a.horario));
   });
 
   if (concluidos.length === 0) {
@@ -4484,7 +4494,7 @@ function renderBarberExtrato(sal) {
         <div class="p-2.5 bg-dark-900 rounded-xl border border-dark-700/80 flex items-center justify-between text-xs hover:border-dark-600 transition-colors">
           <div>
             <div class="font-medium text-white">${a.servico_nome}</div>
-            <div class="text-[11px] text-slate-400">${a.cliente_nome} (${formatarDataPt(a.data)} às ${a.horario || '--:--'})</div>
+            <div class="text-[11px] text-slate-400">${a.cliente_nome} (${formatarDataPt(a.data)} às ${formatarHora(a.horario)})</div>
           </div>
           <div class="text-right">
             <span class="text-gold-400 font-bold">+ ${formatarMoeda(comissao)}</span>
@@ -4645,11 +4655,27 @@ function formatarMoeda(valor) {
 
 function formatarDataPt(dataStr) {
   if (!dataStr) return '--/--';
-  const partes = dataStr.split('-');
+  const limpo = String(dataStr).trim().split('T')[0].split(' ')[0];
+  const partes = limpo.split('-');
   if (partes.length === 3) {
-    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    const dia = partes[2].substring(0, 2);
+    const mes = partes[1].padStart(2, '0');
+    const ano = partes[0];
+    return `${dia}/${mes}/${ano}`;
   }
-  return dataStr;
+  return limpo;
+}
+
+function formatarHora(horarioStr) {
+  if (!horarioStr) return '--:--';
+  const str = String(horarioStr).trim();
+  if (str.includes(' ')) {
+    return str.split(' ')[1].substring(0, 5);
+  }
+  if (str.includes('T')) {
+    return str.split('T')[1].substring(0, 5);
+  }
+  return str.substring(0, 5);
 }
 
 function formatarDataHoraPt(dataHoraStr) {
@@ -4883,7 +4909,8 @@ async function renderMasterView() {
 
   barbearias.forEach(b => {
     const isBloqueada = b.status_licenca === 'BLOQUEADA';
-    const isVencida = b.data_vencimento && b.data_vencimento < hoje;
+    const vencLimpo = b.data_vencimento ? String(b.data_vencimento).trim().split('T')[0].split(' ')[0] : '';
+    const isVencida = vencLimpo && vencLimpo < hoje;
     if (isBloqueada || isVencida) {
       bloqueadasOuVencidas++;
     } else {
@@ -4914,7 +4941,8 @@ async function renderMasterView() {
     if (!matchSearch) return false;
 
     const isBloqueada = b.status_licenca === 'BLOQUEADA';
-    const isVencida = b.data_vencimento && b.data_vencimento < hoje;
+    const vencLimpo = b.data_vencimento ? String(b.data_vencimento).trim().split('T')[0].split(' ')[0] : '';
+    const isVencida = vencLimpo && vencLimpo < hoje;
 
     if (currentMasterStatusFilter === 'em_dia') return !isBloqueada && !isVencida;
     if (currentMasterStatusFilter === 'vencidas') return isVencida;
@@ -4938,15 +4966,18 @@ async function renderMasterView() {
   let html = '';
   filtradas.forEach(b => {
     const isBloqueada = b.status_licenca === 'BLOQUEADA';
-    const isVencida = b.data_vencimento && b.data_vencimento < hoje;
+    const vencLimpo = b.data_vencimento ? String(b.data_vencimento).trim().split('T')[0].split(' ')[0] : '';
+    const isVencida = vencLimpo && vencLimpo < hoje;
     
-    // Cálculo de dias restantes / atraso
+    // Cálculo de dias restantes / atraso sem horário (elimina NaN)
     let vencBadge = '';
-    if (b.data_vencimento) {
-      const diffMs = new Date(b.data_vencimento + 'T23:59:59') - new Date();
+    if (vencLimpo) {
+      const diffMs = new Date(vencLimpo + 'T23:59:59') - new Date();
       const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-      if (diffDias < 0) {
+      if (isNaN(diffDias)) {
+        vencBadge = '';
+      } else if (diffDias < 0) {
         vencBadge = `<span class="bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2 py-0.5 rounded-full text-[10px] font-extrabold block mt-0.5">VENCIDA HÁ ${Math.abs(diffDias)} DIAS</span>`;
       } else if (diffDias === 0) {
         vencBadge = `<span class="bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded-full text-[10px] font-extrabold block mt-0.5">VENCE HOJE</span>`;
@@ -5237,37 +5268,80 @@ async function excluirBarbeariaPrompt(id) {
   }
 }
 
-function auditarBarbearia(id) {
-  const b = (appState.masterBarbearias || []).find(x => x.id === id);
-  if (!b) return;
+async function auditarBarbearia(id) {
+  const b = (appState.masterBarbearias || []).find(x => String(x.id).trim() === String(id).trim());
+  if (!b) {
+    showToast('Barbearia não encontrada.', 'error');
+    return;
+  }
+
+  // 1. Salve a URL da API Master em window.MASTER_ORIGINAL_URL
+  if (!window.MASTER_ORIGINAL_URL) {
+    window.MASTER_ORIGINAL_URL = getGASUrl();
+  }
+
+  // 2. Alterne temporariamente o endpoint ativo para a b.api_url da barbearia auditada (se informada)
+  if (b.api_url && b.api_url.trim().length > 10) {
+    setGASUrl(b.api_url.trim());
+  }
 
   appState.isAuditMode = true;
   appState.currentAuditedBarbearia = b;
 
-  // Atualiza nome da barbearia no banner de auditoria e na sidebar
+  // 3. Alterne a sessão para o perfil de gestor da barbearia
+  currentSession = {
+    perfil: 'gestor',
+    barbearia_id: b.id,
+    nome_barbearia: b.nome_barbearia,
+    usuario: b.login_gestor || 'Gestor',
+    isAuditMode: true
+  };
+  saveCurrentSession();
+
+  // 4. Exiba o banner fixo 'Modo Auditoria: [Nome]'
   const elNome = document.getElementById('audit-barbearia-nome');
   if (elNome) elNome.textContent = b.nome_barbearia;
 
   const banner = document.getElementById('gestor-audit-banner');
   if (banner) banner.classList.remove('hidden');
 
+  if (!appState.config) appState.config = {};
   appState.config.nome_barbearia = b.nome_barbearia;
   updateUIBranding();
 
   showToast(`Modo Auditoria ativado: ${b.nome_barbearia}`, 'info');
+
+  // 5. Chame showView("gestor") com refreshData(true)
   showView('gestor');
-  renderGestorView();
+  await refreshData(true);
 }
 
-function sairModoAuditoria() {
+async function sairModoAuditoria() {
   appState.isAuditMode = false;
   appState.currentAuditedBarbearia = null;
 
+  // 1. Restaure a URL da API Master (window.MASTER_ORIGINAL_URL)
+  if (window.MASTER_ORIGINAL_URL) {
+    setGASUrl(window.MASTER_ORIGINAL_URL);
+  }
+
+  // 2. Oculta o banner de auditoria
   const banner = document.getElementById('gestor-audit-banner');
   if (banner) banner.classList.add('hidden');
 
+  // 3. Retorne a sessão para o Super Admin (Rafael_Martins)
+  currentSession = {
+    perfil: 'master',
+    usuario: 'Rafael_Martins',
+    nome: 'Rafael Martins (Dono do SaaS)'
+  };
+  saveCurrentSession();
+
   showToast('Você retornou ao Painel Master (Super Admin).', 'info');
+
+  // 4. Abra o Painel Master
   showView('master');
+  await refreshData(true);
   renderMasterView();
 }
 

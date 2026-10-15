@@ -349,7 +349,7 @@ function validarRegraSenha(senha) {
 /**
  * Utilitário: Converte os dados brutos de uma aba em Array de Objetos em Memória
  */
-function sheetValuesToObjects(values) {
+function sheetValuesToObjects(values, displayValues) {
   if (!values || values.length <= 1) return [];
   
   var headers = values[0];
@@ -360,15 +360,43 @@ function sheetValuesToObjects(values) {
 
   for (var i = 1; i < numRows; i++) {
     var row = values[i];
+    var dispRow = (displayValues && displayValues[i]) ? displayValues[i] : null;
     if (!row[0] && !row[1]) continue;
 
     var obj = {};
     for (var j = 0; j < numCols; j++) {
-      var header = headers[j];
+      var header = String(headers[j] || '').trim();
       var val = row[j];
+      var dispVal = dispRow ? String(dispRow[j] || '').trim() : '';
+
       if (val instanceof Date) {
-        val = Utilities.formatDate(val, tz, 'yyyy-MM-dd HH:mm:ss');
+        if (header === 'horario' || header === 'hora' || val.getFullYear() <= 1900) {
+          val = Utilities.formatDate(val, tz, 'HH:mm');
+        } else if (header === 'data' || header === 'data_vencimento' || header === 'data_compensacao') {
+          val = Utilities.formatDate(val, tz, 'yyyy-MM-dd');
+        } else {
+          val = Utilities.formatDate(val, tz, 'yyyy-MM-dd HH:mm:ss');
+        }
+      } else if (typeof val === 'string') {
+        var str = val.trim();
+        if (header === 'horario' || header === 'hora') {
+          if (str.indexOf(' ') !== -1) {
+            str = str.split(' ')[1].substring(0, 5);
+          } else if (str.indexOf('T') !== -1) {
+            str = str.split('T')[1].substring(0, 5);
+          } else {
+            str = str.substring(0, 5);
+          }
+          val = str;
+        } else if (header === 'data' || header === 'data_vencimento' || header === 'data_compensacao') {
+          if (str.indexOf('T') !== -1) str = str.split('T')[0];
+          if (str.indexOf(' ') !== -1) str = str.split(' ')[0];
+          val = str;
+        }
+      } else if (val === '' && dispVal) {
+        val = dispVal;
       }
+
       obj[header] = val;
     }
     rows.push(obj);
@@ -566,7 +594,9 @@ function getAllData(diasHistorico) {
   // 2. Leitura otimizada das abas
   var getSheetData = function(name) {
     var sh = ss.getSheetByName(name);
-    return sh ? sheetValuesToObjects(sh.getDataRange().getValues()) : [];
+    if (!sh) return [];
+    var range = sh.getDataRange();
+    return sheetValuesToObjects(range.getValues(), range.getDisplayValues());
   };
 
   var clientes = getSheetData(SHEETS.CLIENTES);
@@ -611,7 +641,8 @@ function getAgendamentosHistorico(dataInicio, dataFim) {
   var sh = ss.getSheetByName(SHEETS.AGENDAMENTOS);
   if (!sh) return { success: false, error: 'Aba de agendamentos não encontrada.' };
 
-  var all = sheetValuesToObjects(sh.getDataRange().getValues());
+  var range = sh.getDataRange();
+  var all = sheetValuesToObjects(range.getValues(), range.getDisplayValues());
   var filtrados = all.filter(function(a) {
     if (!a.data) return false;
     if (dataInicio && a.data < dataInicio) return false;
@@ -678,7 +709,8 @@ function getBarberData(barberId) {
   var sAg = ss.getSheetByName(SHEETS.AGENDAMENTOS);
   var agendamentosBarbeiro = [];
   if (sAg) {
-    var allAg = sheetValuesToObjects(sAg.getDataRange().getValues());
+    var rAg = sAg.getDataRange();
+    var allAg = sheetValuesToObjects(rAg.getValues(), rAg.getDisplayValues());
     agendamentosBarbeiro = allAg.filter(function(a) {
       return String(a.barbeiro_id) === String(barberId);
     });
@@ -688,7 +720,8 @@ function getBarberData(barberId) {
   var sPag = ss.getSheetByName(SHEETS.PAGAMENTOS);
   var pagamentosBarbeiro = [];
   if (sPag) {
-    var allPag = sheetValuesToObjects(sPag.getDataRange().getValues());
+    var rPag = sPag.getDataRange();
+    var allPag = sheetValuesToObjects(rPag.getValues(), rPag.getDisplayValues());
     pagamentosBarbeiro = allPag.filter(function(p) {
       return String(p.barbeiro_id) === String(barberId);
     });
@@ -1760,7 +1793,8 @@ function getMasterBarbearias() {
   var sh = ss.getSheetByName(SHEETS.MASTER);
   if (!sh) return { success: true, barbearias: [] };
 
-  var barbearias = sheetValuesToObjects(sh.getDataRange().getValues());
+  var range = sh.getDataRange();
+  var barbearias = sheetValuesToObjects(range.getValues(), range.getDisplayValues());
   return {
     success: true,
     barbearias: barbearias,
