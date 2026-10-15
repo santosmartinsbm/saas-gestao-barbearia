@@ -137,35 +137,35 @@
         </button>
       </div>
 
-      <!-- Formulário: Gestor (Com Usuário "admin" e Senha "admin123") -->
+      <!-- Formulário: Gestor / Super Admin -->
       <form id="form-login-gestor" onsubmit="handleLoginGestor(event)" class="space-y-4">
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1.5">Usuário do Gestor</label>
+          <label class="block text-xs font-medium text-slate-300 mb-1.5">Usuário (Super Admin ou Gestor)</label>
           <div class="relative">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500">
               <i data-lucide="user" class="w-4 h-4"></i>
             </span>
-            <input type="text" id="input-usuario-gestor" value="admin" placeholder="Usuário (padrão: admin)" class="w-full bg-dark-900 border border-dark-700 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-colors" required>
+            <input type="text" id="input-usuario-gestor" placeholder="Ex: Rafael_Martins ou Barbearia_Nome" class="w-full bg-dark-900 border border-dark-700 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-colors uppercase-none" required>
           </div>
-          <p class="text-[11px] text-slate-500 mt-1">Usuário padrão: <code class="text-gold-400 font-mono">admin</code></p>
+          <p class="text-[11px] text-slate-500 mt-1">Super Admin: <code class="text-gold-400 font-mono">Rafael_Martins</code> | Barbearias: <code class="text-gold-400 font-mono">Barbearia_Nome</code></p>
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-slate-300 mb-1.5">Senha do Gestor</label>
+          <label class="block text-xs font-medium text-slate-300 mb-1.5">Senha de Acesso</label>
           <div class="relative">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500">
               <i data-lucide="lock" class="w-4 h-4"></i>
             </span>
-            <input type="password" id="input-senha-gestor" placeholder="Digite a senha do gestor" class="w-full bg-dark-900 border border-dark-700 rounded-xl pl-10 pr-10 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-colors" required>
+            <input type="password" id="input-senha-gestor" placeholder="Digite sua senha de acesso" class="w-full bg-dark-900 border border-dark-700 rounded-xl pl-10 pr-10 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-colors" required>
             <button type="button" onclick="togglePasswordVisibility('input-senha-gestor', 'eye-gestor')" class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-300">
               <i id="eye-gestor" data-lucide="eye" class="w-4 h-4"></i>
             </button>
           </div>
-          <p class="text-[11px] text-slate-500 mt-1">Senha inicial padrão: <code class="text-gold-400 font-mono">admin123</code></p>
+          <p class="text-[11px] text-slate-500 mt-1">Primeiro acesso de novas barbearias: senha <code class="text-gold-400 font-mono">abc123</code></p>
         </div>
 
         <button type="submit" class="w-full bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-400 hover:to-gold-500 text-dark-900 font-bold py-3 px-4 rounded-xl shadow-lg shadow-gold-500/20 transition-all flex items-center justify-center gap-2">
-          <span>Acessar Painel do Gestor</span>
+          <span>Acessar Sistema</span>
           <i data-lucide="arrow-right" class="w-4 h-4"></i>
         </button>
       </form>
@@ -216,6 +216,170 @@
       </div>
 
     </div>
+  </div>
+
+
+  <!-- ========================================================================= -->
+  <!-- 1.5 PAINEL MASTER (SUPER ADMIN / DONO DO SAAS - RAFAEL MARTINS)           -->
+  <!-- ========================================================================= -->
+  <div id="master-view" class="hidden min-h-screen bg-dark-900 text-slate-100 flex flex-col">
+    
+    <!-- Topbar do Master -->
+    <header class="bg-dark-850/90 backdrop-blur-md sticky top-0 z-20 border-b border-dark-700/80 px-4 sm:px-8 py-4 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-600 via-gold-500 to-amber-400 p-0.5 shadow-lg shadow-gold-500/20">
+          <div class="w-full h-full bg-dark-950 rounded-[14px] flex items-center justify-center">
+            <i data-lucide="crown" class="w-6 h-6 text-gold-400 stroke-[2.2]"></i>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg sm:text-xl font-black text-white tracking-wide">PAINEL MASTER SAAS</h1>
+            <span class="text-[10px] font-extrabold uppercase bg-gold-500/20 text-gold-400 border border-gold-500/40 px-2 py-0.5 rounded-full">Super Admin</span>
+          </div>
+          <p class="text-xs text-slate-400 flex items-center gap-1.5">
+            <span>Dono da Plataforma:</span>
+            <strong class="text-gold-300 font-semibold">Rafael Martins</strong>
+          </p>
+        </div>
+      </div>
+
+      <!-- Ações do Cabeçalho Master -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="openModalCadastrarBarbearia()" class="bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-400 hover:to-gold-500 text-dark-900 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-gold-500/20 transition-all">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span>Nova Barbearia</span>
+        </button>
+        <button onclick="exportarRelatorioMasterCSV()" class="bg-dark-800 hover:bg-dark-700 text-gold-400 border border-gold-500/30 px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all" title="Baixar relatório completo em CSV">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Exportar CSV</span>
+        </button>
+        <button onclick="openModalRelatorioMaster()" class="bg-dark-800 hover:bg-dark-700 text-slate-200 border border-dark-700 px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all" title="Visualizar e Imprimir Relatório Executivo">
+          <i data-lucide="printer" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Imprimir Relatório</span>
+        </button>
+        <button onclick="openModalAlterarSenhaMaster()" class="bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all" title="Alterar Senha do Super Admin">
+          <i data-lucide="key" class="w-4 h-4"></i>
+          <span class="hidden md:inline">Minha Senha</span>
+        </button>
+        <button onclick="logout()" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+          <span>Sair</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Conteúdo Master -->
+    <main class="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto space-y-6">
+      
+      <!-- 4 Cards de KPIs Executivos -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <!-- Total Barbearias -->
+        <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-medium">Total de Barbearias</span>
+            <span class="p-2 bg-blue-500/10 text-blue-400 rounded-xl"><i data-lucide="building-2" class="w-4 h-4"></i></span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span id="master-kpi-total" class="text-3xl font-black text-white">0</span>
+            <span class="text-xs text-slate-400">clientes cadastrados</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1">Multi-tenant ativo</p>
+        </div>
+
+        <!-- Barbearias Em Dia -->
+        <div class="bg-dark-800 border border-emerald-500/30 rounded-2xl p-5 shadow-sm bg-gradient-to-br from-emerald-500/5 to-transparent">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-medium text-emerald-400">Assinaturas Em Dia</span>
+            <span class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl"><i data-lucide="check-circle" class="w-4 h-4"></i></span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span id="master-kpi-em-dia" class="text-3xl font-black text-emerald-400">0</span>
+            <span class="text-xs text-emerald-400/80">ativas</span>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1">Acesso liberado aos gestores e barbeiros</p>
+        </div>
+
+        <!-- Barbearias Vencidas / Bloqueadas -->
+        <div class="bg-dark-800 border border-rose-500/30 rounded-2xl p-5 shadow-sm bg-gradient-to-br from-rose-500/5 to-transparent">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-medium text-rose-400">Vencidas ou Bloqueadas</span>
+            <span class="p-2 bg-rose-500/10 text-rose-400 rounded-xl"><i data-lucide="lock" class="w-4 h-4"></i></span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span id="master-kpi-bloqueadas" class="text-3xl font-black text-rose-400">0</span>
+            <span class="text-xs text-rose-400/80">suspensas</span>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1">Bloqueio automático por vencimento/status</p>
+        </div>
+
+        <!-- Receita Total PIX -->
+        <div class="bg-dark-800 border border-gold-500/40 rounded-2xl p-5 shadow-sm bg-gradient-to-br from-gold-500/10 to-transparent">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-bold text-gold-400 uppercase tracking-wider">Faturamento PIX</span>
+            <span class="p-2 bg-gold-500/10 text-gold-400 rounded-xl"><i data-lucide="wallet" class="w-4 h-4"></i></span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span id="master-kpi-receita-pix" class="text-3xl font-black text-gold-400">R$ 0,00</span>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1">Pagamentos registrados via PIX</p>
+        </div>
+
+      </div>
+
+      <!-- Seção Principal: Tabela de Barbearias -->
+      <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-4 sm:p-6 space-y-4">
+        
+        <!-- Barra de Busca e Filtros Rápidos -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div class="relative flex-1 max-w-md">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500">
+              <i data-lucide="search" class="w-4 h-4"></i>
+            </span>
+            <input type="text" id="master-search-input" oninput="filterMasterTable()" placeholder="Buscar por nome, responsável ou login..." class="w-full bg-dark-900 border border-dark-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-gold-500">
+          </div>
+
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <button onclick="setMasterStatusFilter('todas')" id="master-filter-todas" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-gold-500 text-dark-900 shadow">
+              Todas
+            </button>
+            <button onclick="setMasterStatusFilter('em_dia')" id="master-filter-em_dia" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-dark-900 text-slate-400 border border-dark-700 hover:text-white">
+              Em Dia
+            </button>
+            <button onclick="setMasterStatusFilter('vencidas')" id="master-filter-vencidas" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-dark-900 text-slate-400 border border-dark-700 hover:text-white">
+              Vencidas
+            </button>
+            <button onclick="setMasterStatusFilter('bloqueadas')" id="master-filter-bloqueadas" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-dark-900 text-slate-400 border border-dark-700 hover:text-white">
+              Bloqueadas
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabela Responsiva de Barbearias -->
+        <div class="overflow-x-auto rounded-xl border border-dark-700">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-dark-900 text-slate-400 uppercase text-[11px] font-semibold border-b border-dark-700">
+              <tr>
+                <th class="p-3.5">Barbearia & Responsável</th>
+                <th class="p-3.5">Login Gestor</th>
+                <th class="p-3.5">WhatsApp / Contato</th>
+                <th class="p-3.5">Plano & Valor PIX</th>
+                <th class="p-3.5">Vencimento da Licença</th>
+                <th class="p-3.5 text-center">Status</th>
+                <th class="p-3.5 text-right">Ações de Gestão</th>
+              </tr>
+            </thead>
+            <tbody id="master-barbearias-tbody" class="divide-y divide-dark-700/60 font-medium">
+              <!-- Linhas geradas dinamicamente via JS -->
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+    </main>
+
   </div>
 
 
@@ -306,6 +470,18 @@
     <!-- ÁREA PRINCIPAL DO CONTEÚDO (GESTOR) -->
     <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
       
+      <!-- Banner Sticky de Modo Auditoria (Super Admin) -->
+      <div id="gestor-audit-banner" class="hidden bg-gradient-to-r from-amber-600 via-gold-600 to-amber-700 text-dark-950 font-bold px-4 py-2.5 flex items-center justify-between text-xs sticky top-0 z-30 shadow-md">
+        <div class="flex items-center gap-2">
+          <span class="p-1 bg-dark-900/20 rounded"><i data-lucide="crown" class="w-4 h-4 text-dark-950"></i></span>
+          <span>👑 MODO AUDITORIA: Visualizando barbearia <strong id="audit-barbearia-nome" class="underline"></strong> como Super Admin (Rafael Martins)</span>
+        </div>
+        <button onclick="sairModoAuditoria()" class="bg-dark-950 text-gold-400 hover:text-white px-3 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow">
+          <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+          <span>Voltar ao Painel Master</span>
+        </button>
+      </div>
+
       <!-- Topbar Superior -->
       <header class="bg-dark-850/80 backdrop-blur-md sticky top-0 z-10 border-b border-dark-700/60 px-4 sm:px-6 py-3.5 flex items-center justify-between">
         <div>
@@ -541,35 +717,88 @@
         <!-- ========================================== -->
         <section id="view-caixa" class="space-y-6 hidden">
           
-          <!-- Cards de Saldo e Movimentação -->
+          <!-- Linha 1: Visão Geral de Faturamento & Taxas de Maquininha -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
-            <!-- Saldo em Dinheiro Físico (Gaveta) -->
-            <div class="bg-dark-800 border-2 border-emerald-500/40 rounded-2xl p-5 shadow-lg shadow-emerald-500/5">
+            <!-- Faturamento Bruto (Total Cobrado) -->
+            <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5 shadow-sm">
               <div class="flex items-center justify-between text-slate-400 mb-1">
-                <span class="text-xs font-semibold text-emerald-400">Dinheiro Físico (Gaveta)</span>
-                <span class="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl"><i data-lucide="banknote" class="w-4 h-4"></i></span>
+                <span class="text-xs font-semibold text-slate-300">Faturamento Bruto</span>
+                <span class="p-2 bg-blue-500/10 text-blue-400 rounded-xl"><i data-lucide="trending-up" class="w-4 h-4"></i></span>
               </div>
               <div class="flex items-baseline gap-2">
-                <span id="caixa-saldo-especie" class="text-2xl font-extrabold text-white">R$ 0,00</span>
+                <span id="caixa-total-entradas" class="text-2xl font-black text-blue-400">R$ 0,00</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">Total de serviços e vendas cobrado</p>
+            </div>
+
+            <!-- Taxas de Maquininha / Cartão -->
+            <div class="bg-dark-800 border border-rose-500/30 rounded-2xl p-5 shadow-sm bg-gradient-to-br from-rose-500/5 to-transparent">
+              <div class="flex items-center justify-between text-slate-400 mb-1">
+                <span class="text-xs font-semibold text-rose-400">Taxas de Maquininha</span>
+                <span class="p-2 bg-rose-500/15 text-rose-400 rounded-xl"><i data-lucide="percent" class="w-4 h-4"></i></span>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <span id="caixa-total-taxas" class="text-2xl font-black text-rose-400">- R$ 0,00</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">Descontadas pelas operadoras</p>
+            </div>
+
+            <!-- Faturamento Líquido Real -->
+            <div class="bg-dark-800 border-2 border-emerald-500/50 rounded-2xl p-5 shadow-lg shadow-emerald-500/5 bg-gradient-to-br from-emerald-500/10 to-transparent">
+              <div class="flex items-center justify-between text-slate-400 mb-1">
+                <span class="text-xs font-semibold text-emerald-400">Faturamento Líquido Real</span>
+                <span class="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl"><i data-lucide="check-check" class="w-4 h-4"></i></span>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <span id="caixa-total-liquido" class="text-2xl font-extrabold text-emerald-400">R$ 0,00</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1">Valor real que entra para a barbearia</p>
+            </div>
+
+            <!-- Dinheiro Físico (Gaveta) -->
+            <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5 shadow-sm">
+              <div class="flex items-center justify-between text-slate-400 mb-1">
+                <span class="text-xs font-semibold text-gold-400">Dinheiro Físico (Gaveta)</span>
+                <span class="p-2 bg-gold-500/20 text-gold-400 rounded-xl"><i data-lucide="banknote" class="w-4 h-4"></i></span>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <span id="caixa-saldo-especie" class="text-2xl font-black text-white">R$ 0,00</span>
               </div>
               <p class="text-[11px] text-slate-400 mt-1">Disponível para sangrias e troco</p>
             </div>
 
-            <!-- Total de Entradas -->
-            <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5">
+          </div>
+
+          <!-- Linha 2: Liquidez Imediata vs Previsão Futura a Receber -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <!-- Saldo Disponível Hoje -->
+            <div class="bg-dark-800 border border-emerald-500/30 rounded-2xl p-5 shadow-sm">
               <div class="flex items-center justify-between text-slate-400 mb-1">
-                <span class="text-xs font-semibold">Total de Entradas</span>
-                <span class="p-2 bg-blue-500/10 text-blue-400 rounded-xl"><i data-lucide="arrow-down-left" class="w-4 h-4"></i></span>
+                <span class="text-xs font-semibold text-emerald-300">Saldo Disponível Hoje</span>
+                <span class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl"><i data-lucide="wallet" class="w-4 h-4"></i></span>
               </div>
               <div class="flex items-baseline gap-2">
-                <span id="caixa-total-entradas" class="text-2xl font-bold text-blue-400">R$ 0,00</span>
+                <span id="caixa-saldo-disponivel-hoje" class="text-2xl font-black text-white">R$ 0,00</span>
               </div>
-              <p class="text-[11px] text-slate-400 mt-1">Serviços e vendas concluídas</p>
+              <p class="text-[11px] text-slate-400 mt-1">Gaveta + PIX/Cartões já compensados</p>
             </div>
 
-            <!-- Total de Sangrias Realizadas -->
-            <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5">
+            <!-- A Receber / Lançamentos Futuros -->
+            <div class="bg-dark-800 border border-purple-500/30 rounded-2xl p-5 shadow-sm bg-gradient-to-br from-purple-500/5 to-transparent">
+              <div class="flex items-center justify-between text-slate-400 mb-1">
+                <span class="text-xs font-semibold text-purple-300">A Receber (Lançamentos Futuros)</span>
+                <span class="p-2 bg-purple-500/15 text-purple-400 rounded-xl"><i data-lucide="calendar-clock" class="w-4 h-4"></i></span>
+              </div>
+              <div class="flex items-baseline gap-2">
+                <span id="caixa-total-a-receber-futuro" class="text-2xl font-black text-purple-400">R$ 0,00</span>
+              </div>
+              <p id="caixa-qtd-lancamentos-futuros" class="text-[11px] text-slate-400 mt-1">0 transações aguardando compensação</p>
+            </div>
+
+            <!-- Sangrias do Caixa -->
+            <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5 shadow-sm">
               <div class="flex items-center justify-between text-slate-400 mb-1">
                 <span class="text-xs font-semibold">Sangrias do Caixa</span>
                 <span class="p-2 bg-rose-500/10 text-rose-400 rounded-xl"><i data-lucide="arrow-up-right" class="w-4 h-4"></i></span>
@@ -577,11 +806,11 @@
               <div class="flex items-baseline gap-2">
                 <span id="caixa-total-sangrias" class="text-2xl font-bold text-rose-400">R$ 0,00</span>
               </div>
-              <p class="text-[11px] text-slate-400 mt-1">Retiradas de dinheiro registradas</p>
+              <p class="text-[11px] text-slate-400 mt-1">Retiradas registradas da gaveta</p>
             </div>
 
-            <!-- Pagamentos Feitos a Barbeiros -->
-            <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5">
+            <!-- Comissões Pagas a Barbeiros -->
+            <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5 shadow-sm">
               <div class="flex items-center justify-between text-slate-400 mb-1">
                 <span class="text-xs font-semibold">Comissões Pagas</span>
                 <span class="p-2 bg-amber-500/10 text-amber-400 rounded-xl"><i data-lucide="check-circle" class="w-4 h-4"></i></span>
@@ -602,7 +831,7 @@
               </div>
               <div>
                 <h3 class="text-sm font-bold text-white">Controle & Fechamento de Caixa Diário</h3>
-                <p class="text-xs text-slate-400">Gere o resumo de fechamento por data (Dinheiro, PIX, Cartões, Sangrias e Saldo em Gaveta) e lance sangrias de dinheiro.</p>
+                <p class="text-xs text-slate-400">Gere o resumo de conferência detalhado (Bruto, Taxas de Maquininha, Líquido, Sangrias e Saldo na Gaveta) e lance retiradas de dinheiro.</p>
               </div>
             </div>
             <div class="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
@@ -617,11 +846,46 @@
             </div>
           </div>
 
+          <!-- SEÇÃO EXCLUSIVA: PREVISÃO DE RECEBIMENTO DE CARTÕES (LANÇAMENTOS FUTUROS) -->
+          <div class="bg-dark-800 border border-purple-500/30 rounded-2xl p-5 shadow-sm">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-dark-700/60 pb-3">
+              <div>
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                  <i data-lucide="clock" class="w-4 h-4 text-purple-400"></i>
+                  <span>Previsão de Recebimento de Cartões (Lançamentos Futuros a Receber)</span>
+                </h3>
+                <p class="text-xs text-slate-400 mt-0.5">Valores de transações em Débito e Crédito que ainda vão cair na conta bancária conforme os prazos configurados.</p>
+              </div>
+              <span id="caixa-futuros-badge-total" class="px-3 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 self-start sm:self-auto">
+                Total a Compensar: R$ 0,00
+              </span>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-dark-900/60 text-slate-400 uppercase text-[10px]">
+                  <tr>
+                    <th class="p-3 rounded-l-lg">Data da Venda</th>
+                    <th class="p-3">Data Prevista (Compensação)</th>
+                    <th class="p-3">Cliente & Atendimento</th>
+                    <th class="p-3">Forma & Taxa</th>
+                    <th class="p-3 text-right">Valor Bruto</th>
+                    <th class="p-3 text-right text-rose-400">Taxa Descontada</th>
+                    <th class="p-3 rounded-r-lg text-right text-purple-300">Valor Líquido</th>
+                  </tr>
+                </thead>
+                <tbody id="tabela-caixa-futuros-tbody" class="divide-y divide-dark-700/40">
+                  <!-- Inserido dinamicamente via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <!-- Extrato do Caixa / Movimentações -->
           <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5 shadow-sm">
             <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2">
               <i data-lucide="file-text" class="w-4 h-4 text-gold-500"></i>
-              <span>Extrato de Movimentações Financeiras (Entradas & Saídas)</span>
+              <span>Extrato de Movimentações Financeiras (Entradas & Saídas Detalhadas)</span>
             </h3>
             <div class="overflow-x-auto">
               <table class="w-full text-left text-xs">
@@ -631,7 +895,9 @@
                     <th class="p-3">Tipo</th>
                     <th class="p-3">Descrição / Motivo</th>
                     <th class="p-3">Forma de Pagamento</th>
-                    <th class="p-3 rounded-r-lg text-right">Valor</th>
+                    <th class="p-3 text-right">Valor Bruto</th>
+                    <th class="p-3 text-right text-rose-400">Taxa Operadora</th>
+                    <th class="p-3 rounded-r-lg text-right">Valor Líquido</th>
                   </tr>
                 </thead>
                 <tbody id="tabela-caixa-movimentos-tbody" class="divide-y divide-dark-700/40">
@@ -868,6 +1134,97 @@
                 <div>
                   <label class="block text-xs font-semibold text-slate-300 mb-1.5">Chave PIX da Barbearia</label>
                   <input type="text" id="config-chave-pix" placeholder="E-mail, CNPJ ou Telefone" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500">
+                </div>
+              </div>
+
+              <!-- SEÇÃO: TAXAS E PRAZOS BANCÁRIOS (MAQUININHA & MEIOS DE PAGAMENTO) -->
+              <div class="pt-5 border-t border-dark-700/70 space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                      <i data-lucide="credit-card" class="w-4 h-4 text-gold-500"></i>
+                      <span>Taxas e Prazos Bancários (Maquininha & Pagamentos)</span>
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Configure as taxas cobradas pela sua maquininha e os prazos em dias úteis para previsão exata do seu fluxo de caixa.</p>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <!-- PIX -->
+                  <div class="bg-dark-900/90 border border-dark-700/80 rounded-xl p-4 space-y-3">
+                    <div class="flex items-center gap-2">
+                      <span class="p-1.5 rounded-lg bg-gold-500/10 text-gold-400 font-bold text-xs">⚡ PIX</span>
+                      <span class="text-xs font-semibold text-white">Transações PIX</span>
+                    </div>
+                    <div>
+                      <label class="block text-[11px] font-medium text-slate-400 mb-1">Taxa Cobrada (%)</label>
+                      <div class="relative">
+                        <input type="number" step="0.01" min="0" max="100" id="config-taxa-pix-pct" placeholder="0.00" class="w-full bg-dark-800 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold-500">
+                        <span class="absolute right-3 top-2 text-xs text-slate-500">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-[11px] font-medium text-slate-400 mb-1">Prazo de Recebimento</label>
+                      <div class="relative">
+                        <input type="number" min="0" max="60" id="config-prazo-pix-dias" placeholder="0" class="w-full bg-dark-800 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold-500">
+                        <span class="absolute right-3 top-2 text-[11px] text-slate-500">dias úteis</span>
+                      </div>
+                      <p class="text-[10px] text-slate-500 mt-1">Padrão 0 = compensa na hora (D+0)</p>
+                    </div>
+                  </div>
+
+                  <!-- Cartão de Débito -->
+                  <div class="bg-dark-900/90 border border-dark-700/80 rounded-xl p-4 space-y-3">
+                    <div class="flex items-center gap-2">
+                      <span class="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 font-bold text-xs">💳 DÉBITO</span>
+                      <span class="text-xs font-semibold text-white">Cartão de Débito</span>
+                    </div>
+                    <div>
+                      <label class="block text-[11px] font-medium text-slate-400 mb-1">Taxa Cobrada (%)</label>
+                      <div class="relative">
+                        <input type="number" step="0.01" min="0" max="100" id="config-taxa-debito-pct" placeholder="1.99" class="w-full bg-dark-800 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold-500">
+                        <span class="absolute right-3 top-2 text-xs text-slate-500">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-[11px] font-medium text-slate-400 mb-1">Prazo de Recebimento</label>
+                      <div class="relative">
+                        <input type="number" min="0" max="60" id="config-prazo-debito-dias" placeholder="1" class="w-full bg-dark-800 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold-500">
+                        <span class="absolute right-3 top-2 text-[11px] text-slate-500">dias úteis</span>
+                      </div>
+                      <p class="text-[10px] text-slate-500 mt-1">Ex: 1 = cai no próximo dia útil (D+1)</p>
+                    </div>
+                  </div>
+
+                  <!-- Cartão de Crédito -->
+                  <div class="bg-dark-900/90 border border-dark-700/80 rounded-xl p-4 space-y-3">
+                    <div class="flex items-center gap-2">
+                      <span class="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 font-bold text-xs">💳 CRÉDITO</span>
+                      <span class="text-xs font-semibold text-white">Cartão de Crédito</span>
+                    </div>
+                    <div>
+                      <label class="block text-[11px] font-medium text-slate-400 mb-1">Taxa Cobrada (%)</label>
+                      <div class="relative">
+                        <input type="number" step="0.01" min="0" max="100" id="config-taxa-credito-pct" placeholder="3.99" class="w-full bg-dark-800 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold-500">
+                        <span class="absolute right-3 top-2 text-xs text-slate-500">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-[11px] font-medium text-slate-400 mb-1">Prazo de Recebimento</label>
+                      <div class="relative">
+                        <input type="number" min="0" max="60" id="config-prazo-credito-dias" placeholder="30" class="w-full bg-dark-800 border border-dark-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-gold-500">
+                        <span class="absolute right-3 top-2 text-[11px] text-slate-500">dias</span>
+                      </div>
+                      <p class="text-[10px] text-slate-500 mt-1">Ex: 30 = compensação em 30 dias (D+30)</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="p-3 bg-dark-900/60 rounded-xl border border-dark-700/50 flex items-start gap-2.5">
+                  <i data-lucide="info" class="w-4 h-4 text-gold-400 shrink-0 mt-0.5"></i>
+                  <p class="text-[11px] text-slate-400 leading-relaxed">
+                    <strong class="text-slate-200">Regra Financeira:</strong> Pagamentos em <strong class="text-emerald-400">Dinheiro Físico</strong> possuem taxa 0% e caem imediatamente na gaveta. A comissão dos barbeiros permanece sendo calculada sobre o valor do serviço prestado para preservar a remuneração profissional, enquanto a barbearia visualiza com precisão o valor líquido real após as taxas das operadoras.
+                  </p>
                 </div>
               </div>
 
@@ -1342,22 +1699,53 @@
         <!-- FORMA DE PAGAMENTO RECEBIDA -->
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-2">Selecione a forma de pagamento para dar baixa:</label>
-          <div class="grid grid-cols-2 gap-2" id="finalizar-botoes-forma">
-            <button type="button" onclick="confirmarFinalizacaoComForma('Dinheiro')" class="p-3 bg-dark-900 hover:bg-emerald-500/10 border border-dark-700 hover:border-emerald-500/50 rounded-xl text-xs font-bold text-slate-200 hover:text-emerald-400 flex items-center justify-center gap-2 transition-all">
-              <i data-lucide="banknote" class="w-4 h-4 text-emerald-400"></i>
-              <span>Dinheiro (Espécie)</span>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="finalizar-botoes-forma">
+            <!-- Dinheiro -->
+            <button type="button" onclick="confirmarFinalizacaoComForma('Dinheiro')" class="p-3 bg-dark-900 hover:bg-emerald-500/10 border border-dark-700 hover:border-emerald-500/50 rounded-xl text-left transition-all group">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-slate-200 group-hover:text-emerald-400 flex items-center gap-1.5">
+                  <i data-lucide="banknote" class="w-4 h-4 text-emerald-400"></i>
+                  <span>Dinheiro (Espécie)</span>
+                </span>
+                <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">0% TAXA</span>
+              </div>
+              <span class="text-[10px] text-slate-400 block">Compensação imediata (D+0) na gaveta</span>
             </button>
-            <button type="button" onclick="confirmarFinalizacaoComForma('PIX')" class="p-3 bg-dark-900 hover:bg-gold-500/10 border border-dark-700 hover:border-gold-500/50 rounded-xl text-xs font-bold text-slate-200 hover:text-gold-400 flex items-center justify-center gap-2 transition-all">
-              <i data-lucide="zap" class="w-4 h-4 text-gold-400"></i>
-              <span>PIX</span>
+
+            <!-- PIX -->
+            <button type="button" onclick="confirmarFinalizacaoComForma('PIX')" class="p-3 bg-dark-900 hover:bg-gold-500/10 border border-dark-700 hover:border-gold-500/50 rounded-xl text-left transition-all group">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-slate-200 group-hover:text-gold-400 flex items-center gap-1.5">
+                  <i data-lucide="zap" class="w-4 h-4 text-gold-400"></i>
+                  <span>PIX Instantâneo</span>
+                </span>
+                <span id="finalizar-tag-taxa-pix" class="text-[10px] font-bold text-gold-400 bg-gold-500/10 px-1.5 py-0.5 rounded">0%</span>
+              </div>
+              <span id="finalizar-tag-prazo-pix" class="text-[10px] text-slate-400 block">Compensa na hora (D+0)</span>
             </button>
-            <button type="button" onclick="confirmarFinalizacaoComForma('Cartao_Debito')" class="p-3 bg-dark-900 hover:bg-blue-500/10 border border-dark-700 hover:border-blue-500/50 rounded-xl text-xs font-bold text-slate-200 hover:text-blue-400 flex items-center justify-center gap-2 transition-all">
-              <i data-lucide="credit-card" class="w-4 h-4 text-blue-400"></i>
-              <span>Cartão Débito</span>
+
+            <!-- Cartão de Débito -->
+            <button type="button" onclick="confirmarFinalizacaoComForma('Cartao_Debito')" class="p-3 bg-dark-900 hover:bg-blue-500/10 border border-dark-700 hover:border-blue-500/50 rounded-xl text-left transition-all group">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-slate-200 group-hover:text-blue-400 flex items-center gap-1.5">
+                  <i data-lucide="credit-card" class="w-4 h-4 text-blue-400"></i>
+                  <span>Cartão Débito</span>
+                </span>
+                <span id="finalizar-tag-taxa-debito" class="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">1.99%</span>
+              </div>
+              <span id="finalizar-tag-prazo-debito" class="text-[10px] text-slate-400 block">Compensação em D+1 dia útil</span>
             </button>
-            <button type="button" onclick="confirmarFinalizacaoComForma('Cartao_Credito')" class="p-3 bg-dark-900 hover:bg-purple-500/10 border border-dark-700 hover:border-purple-500/50 rounded-xl text-xs font-bold text-slate-200 hover:text-purple-400 flex items-center justify-center gap-2 transition-all">
-              <i data-lucide="credit-card" class="w-4 h-4 text-purple-400"></i>
-              <span>Cartão Crédito</span>
+
+            <!-- Cartão de Crédito -->
+            <button type="button" onclick="confirmarFinalizacaoComForma('Cartao_Credito')" class="p-3 bg-dark-900 hover:bg-purple-500/10 border border-dark-700 hover:border-purple-500/50 rounded-xl text-left transition-all group">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-slate-200 group-hover:text-purple-400 flex items-center gap-1.5">
+                  <i data-lucide="credit-card" class="w-4 h-4 text-purple-400"></i>
+                  <span>Cartão Crédito</span>
+                </span>
+                <span id="finalizar-tag-taxa-credito" class="text-[10px] font-bold text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">3.99%</span>
+              </div>
+              <span id="finalizar-tag-prazo-credito" class="text-[10px] text-slate-400 block">Compensação em D+30 dias</span>
             </button>
           </div>
         </div>
@@ -1728,47 +2116,95 @@
         </div>
       </div>
 
-      <!-- Resumo Geral em Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <div class="bg-dark-900 p-4 rounded-xl border border-emerald-500/30">
-          <span class="text-[11px] text-slate-400 font-medium block">Total Arrecadado</span>
-          <span id="fechamento-total-arrecadado" class="text-xl font-black text-emerald-400">R$ 0,00</span>
-          <span id="fechamento-qtd-atendimentos" class="text-[10px] text-slate-500 block mt-0.5">0 atendimentos concluídos</span>
+      <!-- Resumo Geral em Cards (2 Linhas de Análise) -->
+      <div class="space-y-3 mb-5">
+        <!-- Linha 1: Faturamento Bruto x Taxas x Líquido -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-dark-900 p-4 rounded-xl border border-blue-500/30">
+            <span class="text-[11px] text-slate-400 font-medium block">Total Bruto Cobrado</span>
+            <span id="fechamento-total-arrecadado" class="text-xl font-black text-blue-400">R$ 0,00</span>
+            <span id="fechamento-qtd-atendimentos" class="text-[10px] text-slate-500 block mt-0.5">0 atendimentos concluídos</span>
+          </div>
+          <div class="bg-dark-900 p-4 rounded-xl border border-rose-500/30">
+            <span class="text-[11px] text-rose-400 font-medium block">Taxas Maquininha / Cartão</span>
+            <span id="fechamento-total-taxas" class="text-xl font-black text-rose-400">- R$ 0,00</span>
+            <span class="text-[10px] text-slate-500 block mt-0.5">Desconto das operadoras</span>
+          </div>
+          <div class="bg-dark-900 p-4 rounded-xl border-2 border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 to-transparent">
+            <span class="text-[11px] text-emerald-400 font-bold uppercase tracking-wider block">Faturamento Líquido Real</span>
+            <span id="fechamento-total-liquido" class="text-xl font-black text-emerald-400">R$ 0,00</span>
+            <span class="text-[10px] text-slate-400 block mt-0.5">Após dedução de taxas</span>
+          </div>
         </div>
-        <div class="bg-dark-900 p-4 rounded-xl border border-rose-500/30">
-          <span class="text-[11px] text-slate-400 font-medium block">Total de Sangrias</span>
-          <span id="fechamento-total-sangrias" class="text-xl font-black text-rose-400">R$ 0,00</span>
-          <span id="fechamento-qtd-sangrias" class="text-[10px] text-slate-500 block mt-0.5">0 retiradas</span>
-        </div>
-        <div class="bg-dark-900 p-4 rounded-xl border-2 border-gold-500/50 bg-gradient-to-br from-gold-500/5 to-transparent">
-          <span class="text-[11px] text-gold-400 font-bold uppercase tracking-wider block">Saldo na Gaveta Físico</span>
-          <span id="fechamento-saldo-gaveta" class="text-xl font-black text-white">R$ 0,00</span>
-          <span class="text-[10px] text-slate-400 block mt-0.5">Dinheiro em espécie esperado</span>
+
+        <!-- Linha 2: Gaveta Física x Disponível Hoje x A Receber Futuro -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-dark-900 p-4 rounded-xl border-2 border-gold-500/50 bg-gradient-to-br from-gold-500/5 to-transparent">
+            <span class="text-[11px] text-gold-400 font-bold uppercase tracking-wider block">Saldo na Gaveta Físico</span>
+            <span id="fechamento-saldo-gaveta" class="text-xl font-black text-white">R$ 0,00</span>
+            <span class="text-[10px] text-slate-400 block mt-0.5">Dinheiro em espécie na loja</span>
+          </div>
+          <div class="bg-dark-900 p-4 rounded-xl border border-emerald-500/30">
+            <span class="text-[11px] text-slate-400 font-medium block">Disponível Hoje (Caixa/Conta)</span>
+            <span id="fechamento-disponivel-hoje" class="text-xl font-black text-white">R$ 0,00</span>
+            <span class="text-[10px] text-slate-500 block mt-0.5">Compensação até a data</span>
+          </div>
+          <div class="bg-dark-900 p-4 rounded-xl border border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-transparent">
+            <span class="text-[11px] text-purple-300 font-semibold block">A Receber Futuro (Cartão)</span>
+            <span id="fechamento-a-receber-futuro" class="text-xl font-black text-purple-400">R$ 0,00</span>
+            <span id="fechamento-qtd-futuros-tag" class="text-[10px] text-slate-400 block mt-0.5">Compensação em datas futuras</span>
+          </div>
         </div>
       </div>
 
-      <!-- Detalhamento por Forma de Pagamento -->
+      <!-- Detalhamento por Forma de Pagamento com Taxas e Valores Líquidos -->
       <div class="bg-dark-900/90 rounded-xl border border-dark-700 p-4 mb-5 space-y-3">
-        <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-          <i data-lucide="pie-chart" class="w-4 h-4 text-gold-500"></i>
-          <span>Arrecadação Separada por Forma de Pagamento</span>
+        <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between">
+          <span class="flex items-center gap-2">
+            <i data-lucide="pie-chart" class="w-4 h-4 text-gold-500"></i>
+            <span>Arrecadação por Forma (Bruto x Líquido da Maquininha)</span>
+          </span>
+          <span class="text-[10px] text-slate-400 font-normal">Baseado nas taxas configuradas</span>
         </h4>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <!-- Dinheiro -->
           <div class="p-3 bg-dark-800 rounded-xl border border-dark-700">
-            <span class="text-slate-400 block text-[11px]">💵 Dinheiro (Espécie)</span>
-            <span id="fechamento-forma-dinheiro" class="font-bold text-emerald-400 text-sm mt-0.5 block">R$ 0,00</span>
+            <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+              <span>💵 Dinheiro</span>
+              <span class="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded">0% • D+0</span>
+            </div>
+            <span id="fechamento-forma-dinheiro" class="font-bold text-emerald-400 text-sm block">R$ 0,00</span>
+            <span class="text-[10px] text-slate-500 block mt-0.5">100% livre de taxa</span>
           </div>
+
+          <!-- PIX -->
           <div class="p-3 bg-dark-800 rounded-xl border border-dark-700">
-            <span class="text-slate-400 block text-[11px]">⚡ PIX</span>
-            <span id="fechamento-forma-pix" class="font-bold text-gold-400 text-sm mt-0.5 block">R$ 0,00</span>
+            <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+              <span>⚡ PIX</span>
+              <span id="fechamento-badge-taxa-pix" class="text-[9px] font-bold text-gold-400 bg-gold-500/10 px-1 py-0.5 rounded">0%</span>
+            </div>
+            <span id="fechamento-forma-pix" class="font-bold text-gold-400 text-sm block">R$ 0,00</span>
+            <span id="fechamento-pix-liquido-tag" class="text-[10px] text-slate-400 block mt-0.5">Líq: R$ 0,00</span>
           </div>
+
+          <!-- Débito -->
           <div class="p-3 bg-dark-800 rounded-xl border border-dark-700">
-            <span class="text-slate-400 block text-[11px]">💳 Cartão Débito</span>
-            <span id="fechamento-forma-debito" class="font-bold text-blue-400 text-sm mt-0.5 block">R$ 0,00</span>
+            <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+              <span>💳 Débito</span>
+              <span id="fechamento-badge-taxa-debito" class="text-[9px] font-bold text-blue-400 bg-blue-500/10 px-1 py-0.5 rounded">1.99%</span>
+            </div>
+            <span id="fechamento-forma-debito" class="font-bold text-blue-400 text-sm block">R$ 0,00</span>
+            <span id="fechamento-debito-liquido-tag" class="text-[10px] text-slate-400 block mt-0.5">Líq: R$ 0,00</span>
           </div>
+
+          <!-- Crédito -->
           <div class="p-3 bg-dark-800 rounded-xl border border-dark-700">
-            <span class="text-slate-400 block text-[11px]">💳 Cartão Crédito</span>
-            <span id="fechamento-forma-credito" class="font-bold text-purple-400 text-sm mt-0.5 block">R$ 0,00</span>
+            <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+              <span>💳 Crédito</span>
+              <span id="fechamento-badge-taxa-credito" class="text-[9px] font-bold text-purple-400 bg-purple-500/10 px-1 py-0.5 rounded">3.99%</span>
+            </div>
+            <span id="fechamento-forma-credito" class="font-bold text-purple-400 text-sm block">R$ 0,00</span>
+            <span id="fechamento-credito-liquido-tag" class="text-[10px] text-slate-400 block mt-0.5">Líq: R$ 0,00</span>
           </div>
         </div>
       </div>
@@ -1870,7 +2306,7 @@
 
 
   <!-- ========================================================================= -->
-  <!-- MODAL OBRIGATÓRIO: PRIMEIRO ACESSO DO GESTOR (TROCA DA SENHA ADMIN123)    -->
+  <!-- MODAL OBRIGATÓRIO: PRIMEIRO ACESSO DO GESTOR (TROCA DA SENHA ABC123)      -->
   <!-- ========================================================================= -->
   <div id="modal-primeiro-acesso-gestor" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-4">
     <div class="bg-dark-800 border-2 border-gold-500/50 rounded-2xl w-full max-w-md p-6 shadow-2xl relative slide-down">
@@ -1879,7 +2315,7 @@
           <i data-lucide="shield-alert" class="w-6 h-6"></i>
         </div>
         <h3 class="text-base font-bold text-white">Segurança do Gestor: Defina sua Senha</h3>
-        <p class="text-xs text-slate-400 mt-1">Você está utilizando a senha padrão inicial (<code class="text-gold-400 font-mono">admin123</code>). Por segurança da sua barbearia, defina sua nova senha pessoal antes de continuar.</p>
+        <p class="text-xs text-slate-400 mt-1">Você está utilizando a senha padrão inicial da sua barbearia (<code class="text-gold-400 font-mono">abc123</code>). Por segurança, defina sua nova senha pessoal antes de continuar.</p>
       </div>
 
       <form onsubmit="handleSalvarPrimeiroAcessoGestor(event)" class="space-y-4">
@@ -1962,6 +2398,261 @@
     </div>
   </div>
 
+
+  <!-- ========================================================================= -->
+  <!-- MODAIS EXCLUSIVOS DO PAINEL MASTER (SUPER ADMIN - RAFAEL MARTINS)         -->
+  <!-- ========================================================================= -->
+
+  <!-- MODAL: CADASTRAR NOVA BARBEARIA -->
+  <div id="modal-cadastrar-barbearia" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-dark-800 border border-dark-700 rounded-3xl w-full max-w-xl p-6 sm:p-7 shadow-2xl relative max-h-[90vh] overflow-y-auto slide-down">
+      <div class="flex items-center justify-between border-b border-dark-700 pb-3 mb-5">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+            <i data-lucide="building-2" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">Cadastrar Nova Barbearia</h3>
+            <p class="text-xs text-slate-400">Geração automática de login no padrão Barbearia_Nome</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-cadastrar-barbearia')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleSalvarMasterBarbearia(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="master-barbearia-id" value="">
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Nome da Barbearia *</label>
+          <input type="text" id="master-input-nome" oninput="previewLoginGestor(this.value)" placeholder="Ex: Navalha de Ouro" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500 font-medium" required>
+        </div>
+
+        <!-- Box de Live Preview do Login Gerado Automaticamente -->
+        <div class="bg-dark-900/90 border border-gold-500/40 rounded-2xl p-3.5 flex items-center justify-between">
+          <div>
+            <span class="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Login Gerado para o Gestor</span>
+            <code id="master-preview-login" class="text-sm font-mono font-bold text-gold-400">Barbearia_Gestor</code>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Senha Inicial Fixa</span>
+            <span class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">abc123</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Nome do Responsável *</label>
+            <input type="text" id="master-input-responsavel" placeholder="Ex: Marcos Silva" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500 font-medium" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">WhatsApp / Telefone *</label>
+            <input type="tel" id="master-input-telefone" placeholder="Ex: (11) 99888-7766" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500 font-medium" required>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">URL da Planilha / API Google (Opcional - Tenancy Isolado)</label>
+          <input type="url" id="master-input-api-url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-gold-500 font-mono">
+          <p class="text-[11px] text-slate-500 mt-0.5">Deixe em branco para usar o banco centralizado desta planilha.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Plano Contratado *</label>
+            <select id="master-input-plano" onchange="autoPreencherPlanoMaster(this.value)" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500 font-medium">
+              <option value="Mensal">Mensal (30 dias)</option>
+              <option value="Trimestral">Trimestral (90 dias)</option>
+              <option value="Semestral">Semestral (180 dias)</option>
+              <option value="Anual">Anual (365 dias)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Valor Pago (R$) *</label>
+            <input type="number" step="0.01" id="master-input-valor" value="149.90" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500 font-medium" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Data de Vencimento *</label>
+            <input type="date" id="master-input-vencimento" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500 font-medium" required>
+          </div>
+        </div>
+
+        <div class="bg-dark-900/60 p-3 rounded-xl border border-dark-700 flex items-center justify-between text-[11px]">
+          <span class="text-slate-400">Forma de Pagamento da Assinatura:</span>
+          <span class="font-bold text-gold-400 bg-gold-500/10 border border-gold-500/20 px-2 py-0.5 rounded">⚡ PIX (Conta de Rafael Martins)</span>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-3 border-t border-dark-700">
+          <button type="button" onclick="closeModal('modal-cadastrar-barbearia')" class="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white transition-colors">
+            Cancelar
+          </button>
+          <button type="submit" class="bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-400 hover:to-gold-500 text-dark-900 font-bold px-5 py-2.5 rounded-xl shadow-lg shadow-gold-500/20 transition-all flex items-center gap-1.5">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>Salvar e Ativar Barbearia</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: RENOVAÇÃO DE ASSINATURA VIA PIX -->
+  <div id="modal-renovar-assinatura-master" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-dark-800 border border-dark-700 rounded-3xl w-full max-w-md p-6 shadow-2xl relative slide-down">
+      <div class="flex items-center justify-between border-b border-dark-700 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">Renovar Assinatura SaaS</h3>
+            <p id="renovar-subtitulo-barbearia" class="text-[11px] text-gold-400">Barbearia selecionada</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-renovar-assinatura-master')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleSalvarRenovacaoMaster(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="renovar-barbearia-id" value="">
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Novo Plano Contratado</label>
+          <select id="renovar-input-plano" onchange="autoPreencherRenovacaoMaster(this.value)" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500">
+            <option value="Mensal">Mensal (+30 dias)</option>
+            <option value="Trimestral">Trimestral (+90 dias)</option>
+            <option value="Semestral">Semestral (+180 dias)</option>
+            <option value="Anual">Anual (+365 dias)</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Valor Pago (R$)</label>
+            <input type="number" step="0.01" id="renovar-input-valor" value="149.90" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold-500 font-medium" required>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Nova Data Vencimento</label>
+            <input type="date" id="renovar-input-vencimento" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold-500 font-medium" required>
+          </div>
+        </div>
+
+        <div class="bg-dark-900/90 p-3 rounded-xl border border-dark-700 space-y-1.5 text-[11px]">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400">Forma de Pagamento:</span>
+            <span class="font-bold text-emerald-400">⚡ PIX Confirmado</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-400">Status Após Salvar:</span>
+            <span class="font-bold text-emerald-400">ATIVA (Destravada)</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-3 border-t border-dark-700">
+          <button type="button" onclick="closeModal('modal-renovar-assinatura-master')" class="px-4 py-2 rounded-xl text-slate-400 hover:text-white">
+            Cancelar
+          </button>
+          <button type="submit" class="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-dark-900 font-bold px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-1.5">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>Confirmar PIX e Destravar</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ALTERAR SENHA DO SUPER ADMIN -->
+  <div id="modal-alterar-senha-master" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-dark-800 border-2 border-gold-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl relative slide-down">
+      <div class="flex items-center justify-between border-b border-dark-700 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="key" class="w-5 h-5 text-gold-400"></i>
+          <h3 class="text-sm font-bold text-white">Alterar Senha do Super Admin</h3>
+        </div>
+        <button onclick="closeModal('modal-alterar-senha-master')" class="text-slate-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleSalvarSenhaMaster(event)" class="space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Senha Atual (Padrão inicial: RSNf14232603*)</label>
+          <div class="relative">
+            <input type="password" id="input-master-senha-atual" placeholder="Digite a senha atual" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500" required>
+            <button type="button" onclick="togglePasswordVisibility('input-master-senha-atual', 'eye-master-1')" class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-300">
+              <i id="eye-master-1" data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Nova Senha Pessoal</label>
+          <div class="relative">
+            <input type="password" id="input-master-nova-senha" placeholder="Digite a nova senha" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500" required>
+            <button type="button" onclick="togglePasswordVisibility('input-master-nova-senha', 'eye-master-2')" class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-300">
+              <i id="eye-master-2" data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Confirmar Nova Senha</label>
+          <div class="relative">
+            <input type="password" id="input-master-confirma-senha" placeholder="Confirme a nova senha" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-gold-500" required>
+            <button type="button" onclick="togglePasswordVisibility('input-master-confirma-senha', 'eye-master-3')" class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-300">
+              <i id="eye-master-3" data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-dark-900/80 p-3 rounded-xl border border-dark-700 text-[11px] text-slate-400 space-y-1">
+          <p class="font-semibold text-slate-300">Requisitos da Senha:</p>
+          <ul class="list-disc list-inside space-y-0.5">
+            <li>Mínimo de 6 caracteres</li>
+            <li>Conter letras e números obrigatórios</li>
+          </ul>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-3 border-t border-dark-700">
+          <button type="button" onclick="closeModal('modal-alterar-senha-master')" class="px-4 py-2 rounded-xl text-slate-400 hover:text-white">
+            Cancelar
+          </button>
+          <button type="submit" class="bg-gold-500 hover:bg-gold-400 text-dark-900 font-bold px-4 py-2.5 rounded-xl shadow-md transition-all">
+            Salvar Nova Senha Master
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: RELATÓRIO EXECUTIVO MASTER -->
+  <div id="modal-relatorio-master" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-dark-800 border border-dark-700 rounded-3xl w-full max-w-4xl p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto slide-down">
+      <div class="flex items-center justify-between border-b border-dark-700 pb-4 mb-5">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i data-lucide="file-text" class="w-5 h-5 text-gold-400"></i>
+            <span>Relatório Consolidado de Barbearias & Assinaturas SaaS</span>
+          </h3>
+          <p class="text-xs text-slate-400">Visão executiva com faturamento PIX, status de vencimento e auditoria</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="imprimirRelatorioMaster()" class="bg-gold-500 hover:bg-gold-400 text-dark-900 font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow">
+            <i data-lucide="printer" class="w-4 h-4"></i>
+            <span>Imprimir / PDF</span>
+          </button>
+          <button onclick="closeModal('modal-relatorio-master')" class="text-slate-400 hover:text-white p-1">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="relatorio-master-preview-content" class="space-y-4 text-xs text-slate-300">
+        <!-- Gerado dinamicamente via JS -->
+      </div>
+    </div>
+  </div>
 
   <!-- ========================================================================= -->
   <!-- BOTÃO FLUTUANTE (FAB) PARA NOVO AGENDAMENTO RÁPIDO NO CELULAR             -->

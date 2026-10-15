@@ -30,15 +30,30 @@ const DYNAMIC_CACHE_THROTTLE_MS = 3 * 60 * 1000;
 
 let appState = {
   config: {
-    nome_barbearia: 'GESTÃO PROFISSIONAL DE BARBEARIA',
+    nome_barbearia: 'Barbearia Vintage & Estilo',
     logo_url: '',
-    usuario_gestor: 'admin',
-    senha_gestor: 'admin123',
+    usuario_gestor: 'Barbearia_VintageEstilo',
+    senha_gestor: 'abc123',
     status_licenca: 'ATIVA',
     suporte_whatsapp: '5511999999999',
     telefone_barbearia: '(11) 98765-4321',
-    chave_pix: 'pix@barbearia.com'
+    chave_pix: 'pix@barbearia.com',
+    taxa_pix_pct: 0,
+    prazo_pix_dias: 0,
+    taxa_debito_pct: 1.99,
+    prazo_debito_dias: 1,
+    taxa_credito_pct: 3.99,
+    prazo_credito_dias: 30
   },
+  masterConfig: {
+    superadmin_login: 'Rafael_Martins',
+    superadmin_senha: 'RSNf14232603*',
+    suporte_whatsapp: '5511999999999',
+    chave_pix: 'pix@rafaelmartins.com'
+  },
+  masterBarbearias: [],
+  isAuditMode: false,
+  currentAuditedBarbearia: null,
   clientes: [],
   produtos: [],
   servicos: [],
@@ -56,6 +71,71 @@ let isSyncing = false;
 let lastSyncTimestamp = 0;
 let comandaProdutosAdicionados = [];
 
+/**
+ * Utilitário Financeiro: Calcula a data de compensação bancária considerando dias úteis
+ * Pula Sábados e Domingos
+ */
+function calcularDataCompensacao(dataStr, diasUteis) {
+  if (!diasUteis || diasUteis <= 0) return dataStr || getHojeString();
+  const partes = String(dataStr).split('-');
+  if (partes.length < 3) return dataStr || getHojeString();
+  const ano = parseInt(partes[0], 10);
+  const mes = parseInt(partes[1], 10) - 1;
+  const dia = parseInt(partes[2], 10);
+  const dt = new Date(ano, mes, dia);
+  let restantes = parseInt(diasUteis, 10);
+  while (restantes > 0) {
+    dt.setDate(dt.getDate() + 1);
+    const dw = dt.getDay(); // 0 = Domingo, 6 = Sábado
+    if (dw !== 0 && dw !== 6) {
+      restantes--;
+    }
+  }
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Utilitário Financeiro: Calcula taxa da maquininha, valor líquido e data de compensação
+ */
+function calcularTaxaECompensacao(valorTotal, formaPagamento, config, dataTransacao) {
+  const valor = parseFloat(valorTotal) || 0;
+  const forma = String(formaPagamento || '').trim();
+  const cfg = config || (appState && appState.config) || {};
+  let taxaPct = 0;
+  let prazoDias = 0;
+
+  if (forma === 'PIX') {
+    taxaPct = cfg.taxa_pix_pct !== undefined ? (parseFloat(cfg.taxa_pix_pct) || 0) : 0;
+    prazoDias = cfg.prazo_pix_dias !== undefined ? (parseInt(cfg.prazo_pix_dias) || 0) : 0;
+  } else if (forma === 'Cartao_Debito' || forma === 'Débito' || forma === 'Debito') {
+    taxaPct = cfg.taxa_debito_pct !== undefined ? (parseFloat(cfg.taxa_debito_pct) || 0) : 1.99;
+    prazoDias = cfg.prazo_debito_dias !== undefined ? (parseInt(cfg.prazo_debito_dias) || 0) : 1;
+  } else if (forma === 'Cartao_Credito' || forma === 'Crédito' || forma === 'Credito') {
+    taxaPct = cfg.taxa_credito_pct !== undefined ? (parseFloat(cfg.taxa_credito_pct) || 0) : 3.99;
+    prazoDias = cfg.prazo_credito_dias !== undefined ? (parseInt(cfg.prazo_credito_dias) || 0) : 30;
+  } else {
+    // Dinheiro físico: taxa sempre 0% e D+0 imediato
+    taxaPct = 0;
+    prazoDias = 0;
+  }
+
+  const taxaAplicadaValor = Math.round((valor * (taxaPct / 100)) * 100) / 100;
+  const valorLiquido = Math.max(0, Math.round((valor - taxaAplicadaValor) * 100) / 100);
+  const dataRef = dataTransacao || getHojeString();
+  const dataCompensacao = calcularDataCompensacao(dataRef, prazoDias);
+
+  return {
+    taxaPct,
+    taxaAplicadaValor,
+    valorLiquido,
+    prazoDias,
+    dataCompensacao
+  };
+}
+
 // =========================================================================
 // 2. DADOS DE DEMONSTRAÇÃO (MODO OFFLINE / TESTE IMEDIATO)
 // =========================================================================
@@ -65,15 +145,76 @@ function getDefaultMockData() {
 
   return {
     config: {
-      nome_barbearia: 'GESTÃO PROFISSIONAL DE BARBEARIA',
+      nome_barbearia: 'Barbearia Vintage & Estilo',
       logo_url: '',
-      usuario_gestor: 'admin',
-      senha_gestor: 'admin123',
+      usuario_gestor: 'Barbearia_VintageEstilo',
+      senha_gestor: 'abc123',
       status_licenca: 'ATIVA',
       suporte_whatsapp: '5511999999999',
       telefone_barbearia: '(11) 98765-4321',
-      chave_pix: 'pix@barbearia.com'
+      chave_pix: 'pix@barbearia.com',
+      taxa_pix_pct: 0,
+      prazo_pix_dias: 0,
+      taxa_debito_pct: 1.99,
+      prazo_debito_dias: 1,
+      taxa_credito_pct: 3.99,
+      prazo_credito_dias: 30
     },
+    masterConfig: {
+      superadmin_login: 'Rafael_Martins',
+      superadmin_senha: 'RSNf14232603*',
+      suporte_whatsapp: '5511999999999',
+      chave_pix: 'pix@rafaelmartins.com'
+    },
+    masterBarbearias: [
+      {
+        id: 'BARB-1',
+        nome_barbearia: 'Barbearia Vintage & Estilo',
+        responsavel: 'Marcos Silva',
+        telefone: '(11) 99111-2233',
+        login_gestor: 'Barbearia_VintageEstilo',
+        senha_gestor: 'abc123',
+        plano: 'Mensal',
+        valor_pago: 149.90,
+        forma_pagamento_pix: 'PIX',
+        data_vencimento: getDataFutura(28),
+        status_licenca: 'ATIVA',
+        api_url: '',
+        criado_em: '2026-03-01 10:00:00'
+      },
+      {
+        id: 'BARB-2',
+        nome_barbearia: 'Navalha de Ouro',
+        responsavel: 'Carlos Eduardo',
+        telefone: '(11) 98877-6655',
+        login_gestor: 'Barbearia_NavalhaOuro',
+        senha_gestor: 'abc123',
+        plano: 'Trimestral',
+        valor_pago: 399.90,
+        forma_pagamento_pix: 'PIX',
+        data_vencimento: getDataFutura(75),
+        status_licenca: 'ATIVA',
+        api_url: '',
+        criado_em: '2026-03-01 10:00:00'
+      },
+      {
+        id: 'BARB-3',
+        nome_barbearia: 'Barbearia Retrô Club',
+        responsavel: 'Felipe Albuquerque',
+        telefone: '(11) 97766-5544',
+        login_gestor: 'Barbearia_RetroClub',
+        senha_gestor: 'abc123',
+        plano: 'Mensal',
+        valor_pago: 149.90,
+        forma_pagamento_pix: 'PIX',
+        data_vencimento: getDataPassada(5), // Vencida há 5 dias para demonstrar o controle de inadimplência
+        status_licenca: 'ATIVA',
+        api_url: '',
+        criado_em: '2026-02-10 10:00:00'
+      }
+    ],
+    isAuditMode: false,
+    currentAuditedBarbearia: null,
     clientes: [
       { id: 'CLI-1', nome: 'Carlos Mendes', telefone: '11999887766', criado_em: '2026-03-01 10:00:00' },
       { id: 'CLI-2', nome: 'Rafael Souza', telefone: '11988776655', criado_em: '2026-03-01 11:30:00' },
@@ -99,11 +240,12 @@ function getDefaultMockData() {
       { id: 'BRB-2', nome: 'Marcos Vinicius Santos', telefone: '11992223344', login: 'Marcos_Santos', senha: '123', comissao_pct: 60, ativo: 'SIM', criado_em: '2026-03-01 10:00:00' }
     ],
     agendamentos: [
-      { id: 'AGD-1', cliente_nome: 'Carlos Mendes', cliente_telefone: '11999887766', servico_id: 'SRV-1', servico_nome: 'Corte Degradê / Moderno', servico_preco: 45.00, barbeiro_id: 'BRB-1', barbeiro_nome: 'João Carlos da Silva', data: hoje, horario: '09:00', status: 'Concluido', forma_pagamento: 'PIX', comissao_valor: 22.50, criado_em: hoje + ' 08:00:00' },
-      { id: 'AGD-2', cliente_nome: 'Rafael Souza', cliente_telefone: '11988776655', servico_id: 'SRV-3', servico_nome: 'Combo Completo (Corte + Barba)', servico_preco: 70.00, barbeiro_id: 'BRB-1', barbeiro_nome: 'João Carlos da Silva', data: hoje, horario: '10:00', status: 'Concluido', forma_pagamento: 'Dinheiro', comissao_valor: 35.00, criado_em: hoje + ' 08:30:00' },
-      { id: 'AGD-3', cliente_nome: 'Lucas Almeida', cliente_telefone: '11977665544', servico_id: 'SRV-2', servico_nome: 'Barba Terapia com Toalha Quente', servico_preco: 35.00, barbeiro_id: 'BRB-2', barbeiro_nome: 'Marcos Vinicius Santos', data: hoje, horario: '11:00', status: 'Concluido', forma_pagamento: 'Cartao_Debito', comissao_valor: 21.00, criado_em: hoje + ' 09:00:00' },
+      { id: 'AGD-1', cliente_nome: 'Carlos Mendes', cliente_telefone: '11999887766', servico_id: 'SRV-1', servico_nome: 'Corte Degradê / Moderno', servico_preco: 45.00, barbeiro_id: 'BRB-1', barbeiro_nome: 'João Carlos da Silva', data: hoje, horario: '09:00', status: 'Concluido', forma_pagamento: 'PIX', comissao_valor: 22.50, criado_em: hoje + ' 08:00:00', total_venda: 45.00, taxa_aplicada_valor: 0.00, valor_liquido: 45.00, data_compensacao: hoje },
+      { id: 'AGD-2', cliente_nome: 'Rafael Souza', cliente_telefone: '11988776655', servico_id: 'SRV-3', servico_nome: 'Combo Completo (Corte + Barba)', servico_preco: 70.00, barbeiro_id: 'BRB-1', barbeiro_nome: 'João Carlos da Silva', data: hoje, horario: '10:00', status: 'Concluido', forma_pagamento: 'Dinheiro', comissao_valor: 35.00, criado_em: hoje + ' 08:30:00', total_venda: 70.00, taxa_aplicada_valor: 0.00, valor_liquido: 70.00, data_compensacao: hoje },
+      { id: 'AGD-3', cliente_nome: 'Lucas Almeida', cliente_telefone: '11977665544', servico_id: 'SRV-2', servico_nome: 'Barba Terapia com Toalha Quente', servico_preco: 35.00, barbeiro_id: 'BRB-2', barbeiro_nome: 'Marcos Vinicius Santos', data: hoje, horario: '11:00', status: 'Concluido', forma_pagamento: 'Cartao_Debito', comissao_valor: 21.00, criado_em: hoje + ' 09:00:00', total_venda: 35.00, taxa_aplicada_valor: 0.70, valor_liquido: 34.30, data_compensacao: calcularDataCompensacao(hoje, 1) },
       { id: 'AGD-4', cliente_nome: 'Bruno Henrique', cliente_telefone: '11966554433', servico_id: 'SRV-1', servico_nome: 'Corte Degradê / Moderno', servico_preco: 45.00, barbeiro_id: 'BRB-1', barbeiro_nome: 'João Carlos da Silva', data: hoje, horario: '14:30', status: 'Agendado', forma_pagamento: 'Pendente', comissao_valor: 22.50, criado_em: hoje + ' 10:00:00' },
-      { id: 'AGD-5', cliente_nome: 'Thiago Oliveira', cliente_telefone: '11955443322', servico_id: 'SRV-3', servico_nome: 'Combo Completo (Corte + Barba)', servico_preco: 70.00, barbeiro_id: 'BRB-2', barbeiro_nome: 'Marcos Vinicius Santos', data: amanha, horario: '15:00', status: 'Agendado', forma_pagamento: 'Pendente', comissao_valor: 42.00, criado_em: hoje + ' 10:30:00' }
+      { id: 'AGD-5', cliente_nome: 'Thiago Oliveira', cliente_telefone: '11955443322', servico_id: 'SRV-3', servico_nome: 'Combo Completo (Corte + Barba)', servico_preco: 70.00, barbeiro_id: 'BRB-2', barbeiro_nome: 'Marcos Vinicius Santos', data: amanha, horario: '15:00', status: 'Agendado', forma_pagamento: 'Pendente', comissao_valor: 42.00, criado_em: hoje + ' 10:30:00' },
+      { id: 'AGD-6', cliente_nome: 'Mateus Silveira', cliente_telefone: '11944332211', servico_id: 'SRV-3', servico_nome: 'Combo Completo (Corte + Barba)', servico_preco: 140.00, barbeiro_id: 'BRB-1', barbeiro_nome: 'João Carlos da Silva', data: hoje, horario: '13:00', status: 'Concluido', forma_pagamento: 'Cartao_Credito', comissao_valor: 70.00, criado_em: hoje + ' 12:30:00', total_venda: 140.00, taxa_aplicada_valor: 5.59, valor_liquido: 134.41, data_compensacao: calcularDataCompensacao(hoje, 30) }
     ],
     sangrias: [
       { id: 'SNG-1', valor: 30.00, motivo: 'Pagamento Garrafão de Água Mineral', data_hora: hoje + ' 10:30:00', usuario: 'Gestor' }
@@ -367,50 +509,202 @@ function handleLocalAction(action, payload) {
       };
     }
 
-    case 'loginGestor': {
-      const cfg = appState.config || {};
-      if (cfg.status_licenca === 'BLOQUEADA') {
-        return {
-          success: false,
-          bloqueado: true,
-          status_licenca: 'BLOQUEADA',
-          error: 'Licença suspensa por inadimplência. Entre em contato com o suporte.'
-        };
-      }
-
-      const usuarioEsperado = (cfg.usuario_gestor || 'admin').trim().toLowerCase();
-      const senhaEsperada = (cfg.senha_gestor || 'admin123').trim();
-      const usuarioDigitado = String(payload.usuario || 'admin').trim().toLowerCase();
-      const senhaDigitada = String(payload.senha || '').trim();
-
-      if (usuarioDigitado !== usuarioEsperado) {
-        return { success: false, error: 'Usuário do gestor incorreto (padrão: admin).' };
-      }
-
-      if (senhaDigitada !== senhaEsperada) {
-        return { success: false, error: 'Senha incorreta para acesso de Gestor.' };
-      }
-
-      const primeiroAcesso = (senhaDigitada === 'admin123');
+    case 'getMasterBarbearias': {
       return {
         success: true,
-        perfil: 'gestor',
-        primeiroAcessoGestor: primeiroAcesso
+        barbearias: appState.masterBarbearias || [],
+        total: (appState.masterBarbearias || []).length
       };
     }
 
-    case 'alterarSenhaGestor': {
-      const cfg = appState.config || {};
-      const senhaAtualEsperada = (cfg.senha_gestor || 'admin123').trim();
-      const senhaAtualDigitada = String(payload.senhaAtual || '').trim();
+    case 'saveMasterBarbearia': {
+      const b = payload.barbearia;
+      if (!b || !b.nome_barbearia) return { success: false, error: 'Nome da barbearia obrigatório.' };
+      
+      if (!appState.masterBarbearias) appState.masterBarbearias = [];
+      const loginGestor = b.login_gestor || gerarLoginGestorBarbearia(b.nome_barbearia);
 
-      if (!payload.force && senhaAtualDigitada !== senhaAtualEsperada) {
-        return { success: false, error: 'Senha atual do gestor incorreta.' };
+      if (b.id) {
+        const idx = appState.masterBarbearias.findIndex(x => x.id === b.id);
+        if (idx !== -1) {
+          appState.masterBarbearias[idx] = {
+            ...appState.masterBarbearias[idx],
+            ...b,
+            login_gestor: loginGestor,
+            forma_pagamento_pix: 'PIX'
+          };
+        }
+      } else {
+        const newId = 'BARB-' + Date.now();
+        const nova = {
+          id: newId,
+          nome_barbearia: b.nome_barbearia,
+          responsavel: b.responsavel || '',
+          telefone: b.telefone || '',
+          login_gestor: loginGestor,
+          senha_gestor: 'abc123',
+          plano: b.plano || 'Mensal',
+          valor_pago: parseFloat(b.valor_pago) || 149.90,
+          forma_pagamento_pix: 'PIX',
+          data_vencimento: b.data_vencimento || getDataFutura(30),
+          status_licenca: 'ATIVA',
+          api_url: b.api_url || '',
+          criado_em: getHojeAgoraString()
+        };
+        appState.masterBarbearias.unshift(nova);
+      }
+      saveLocalData();
+      return { success: true, message: 'Barbearia salva com sucesso! Login gerado: ' + loginGestor };
+    }
+
+    case 'toggleStatusLicencaMaster': {
+      const b = (appState.masterBarbearias || []).find(x => x.id === payload.id);
+      if (!b) return { success: false, error: 'Barbearia não encontrada.' };
+      b.status_licenca = payload.status || (b.status_licenca === 'ATIVA' ? 'BLOQUEADA' : 'ATIVA');
+      saveLocalData();
+      return { success: true, novoStatus: b.status_licenca, message: `Status alterado para ${b.status_licenca}!` };
+    }
+
+    case 'renovarVencimentoMaster': {
+      const b = (appState.masterBarbearias || []).find(x => x.id === payload.id);
+      if (!b) return { success: false, error: 'Barbearia não encontrada.' };
+      if (payload.novo_vencimento) b.data_vencimento = payload.novo_vencimento;
+      if (payload.novo_plano) b.plano = payload.novo_plano;
+      if (payload.valor_pago !== undefined) b.valor_pago = parseFloat(payload.valor_pago) || 0;
+      b.forma_pagamento_pix = 'PIX';
+      b.status_licenca = 'ATIVA';
+      saveLocalData();
+      return { success: true, message: 'Assinatura renovada com sucesso via PIX!' };
+    }
+
+    case 'resetSenhaGestorMaster': {
+      const b = (appState.masterBarbearias || []).find(x => x.id === payload.id);
+      if (!b) return { success: false, error: 'Barbearia não encontrada.' };
+      b.senha_gestor = 'abc123';
+      saveLocalData();
+      return { success: true, message: 'Senha do gestor resetada para "abc123"!' };
+    }
+
+    case 'deleteMasterBarbearia': {
+      appState.masterBarbearias = (appState.masterBarbearias || []).filter(x => x.id !== payload.id);
+      saveLocalData();
+      return { success: true, message: 'Barbearia removida do SaaS com sucesso!' };
+    }
+
+    case 'alterarSenhaMaster': {
+      const valid = validarRegraSenha(payload.novaSenha);
+      if (!valid.valido) return { success: false, error: valid.erro };
+      if (payload.senhaAtual && payload.senhaAtual !== (appState.masterConfig?.superadmin_senha || 'RSNf14232603*')) {
+        return { success: false, error: 'Senha atual do Super Admin incorreta.' };
+      }
+      if (!appState.masterConfig) appState.masterConfig = {};
+      appState.masterConfig.superadmin_senha = payload.novaSenha;
+      saveLocalData();
+      return { success: true, message: 'Senha do Super Admin alterada com sucesso!' };
+    }
+
+    case 'loginGestor': {
+      const usuarioDigitado = String(payload.usuario || '').trim();
+      const senhaDigitada = String(payload.senha || '').trim();
+      const hoje = getHojeString();
+
+      // 1. Super Admin (Rafael_Martins)
+      if (usuarioDigitado.toLowerCase() === 'rafael_martins') {
+        const superSenha = appState.masterConfig?.superadmin_senha || 'RSNf14232603*';
+        if (senhaDigitada !== superSenha) {
+          return { success: false, error: 'Senha incorreta para acesso Super Admin.' };
+        }
+        return {
+          success: true,
+          perfil: 'master',
+          usuario: 'Rafael_Martins',
+          nome: 'Rafael Martins (Dono do SaaS)',
+          message: 'Bem-vindo ao Painel Master, Rafael Martins!'
+        };
       }
 
+      // 2. Busca na lista de barbearias cadastradas pelo Master
+      const barbearias = appState.masterBarbearias || [];
+      const barbEncontrada = barbearias.find(b =>
+        String(b.login_gestor || '').trim().toLowerCase() === usuarioDigitado.toLowerCase() ||
+        String(b.nome_barbearia || '').trim().toLowerCase() === usuarioDigitado.toLowerCase()
+      );
+
+      if (barbEncontrada) {
+        if (barbEncontrada.status_licenca === 'BLOQUEADA') {
+          return {
+            success: false,
+            bloqueado: true,
+            motivo: 'bloqueada',
+            nome_barbearia: barbEncontrada.nome_barbearia,
+            suporte_whatsapp: appState.masterConfig?.suporte_whatsapp || '5511999999999',
+            error: 'Acesso suspenso pelo administrador do sistema. Contate Rafael Martins para regularização via PIX.'
+          };
+        }
+
+        if (barbEncontrada.data_vencimento && barbEncontrada.data_vencimento < hoje) {
+          return {
+            success: false,
+            bloqueado: true,
+            motivo: 'vencida',
+            data_vencimento: barbEncontrada.data_vencimento,
+            nome_barbearia: barbEncontrada.nome_barbearia,
+            suporte_whatsapp: appState.masterConfig?.suporte_whatsapp || '5511999999999',
+            error: `Assinatura vencida em ${barbEncontrada.data_vencimento}. Renove via PIX com Rafael Martins.`
+          };
+        }
+
+        const senhaEsperada = (barbEncontrada.senha_gestor || 'abc123').trim();
+        if (senhaDigitada !== senhaEsperada) {
+          return { success: false, error: 'Senha incorreta para esta barbearia.' };
+        }
+
+        const isPrimeiroAcesso = (senhaEsperada === 'abc123');
+        return {
+          success: true,
+          perfil: 'gestor',
+          barbearia_id: barbEncontrada.id,
+          nome_barbearia: barbEncontrada.nome_barbearia,
+          usuario: barbEncontrada.login_gestor,
+          primeiroAcessoGestor: isPrimeiroAcesso,
+          status_licenca: barbEncontrada.status_licenca,
+          data_vencimento: barbEncontrada.data_vencimento
+        };
+      }
+
+      // 3. Fallback na config local
+      const cfg = appState.config || {};
+      const usuarioLocal = (cfg.usuario_gestor || '').trim().toLowerCase();
+      if (usuarioLocal && usuarioDigitado.toLowerCase() === usuarioLocal) {
+        const senhaLocal = (cfg.senha_gestor || 'abc123').trim();
+        if (senhaDigitada !== senhaLocal) {
+          return { success: false, error: 'Senha incorreta.' };
+        }
+        return {
+          success: true,
+          perfil: 'gestor',
+          usuario: cfg.usuario_gestor,
+          primeiroAcessoGestor: (senhaLocal === 'abc123')
+        };
+      }
+
+      return { success: false, error: 'Usuário não localizado no sistema.' };
+    }
+
+    case 'alterarSenhaGestor': {
       const valid = validarRegraSenha(payload.novaSenha);
       if (!valid.valido) {
         return { success: false, error: valid.erro };
+      }
+
+      if (payload.barbearia_id || payload.login_gestor) {
+        const b = (appState.masterBarbearias || []).find(x =>
+          (payload.barbearia_id && x.id === payload.barbearia_id) ||
+          (payload.login_gestor && x.login_gestor.toLowerCase() === payload.login_gestor.toLowerCase())
+        );
+        if (b) {
+          b.senha_gestor = String(payload.novaSenha).trim();
+        }
       }
 
       appState.config.senha_gestor = String(payload.novaSenha).trim();
@@ -650,6 +944,14 @@ function handleLocalAction(action, payload) {
         if (payload.forma_pagamento) {
           agd.forma_pagamento = payload.forma_pagamento;
         }
+        if (payload.status === 'Concluido') {
+          const total = parseFloat(agd.total_venda) || parseFloat(agd.total_comanda) || parseFloat(agd.servico_preco) || 0;
+          const calc = calcularTaxaECompensacao(total, agd.forma_pagamento, appState.config, agd.data);
+          agd.total_venda = total;
+          agd.taxa_aplicada_valor = calc.taxaAplicadaValor;
+          agd.valor_liquido = calc.valorLiquido;
+          agd.data_compensacao = calc.dataCompensacao;
+        }
         saveLocalData();
         return { success: true, message: 'Status atualizado!' };
       }
@@ -657,7 +959,7 @@ function handleLocalAction(action, payload) {
     }
 
     case 'finalizarAtendimentoComanda': {
-      const agd = appState.agendamentos.find(x => x.id === payload.agendamento_id);
+      const agd = appState.agendamentos.find(x => x.id === (payload.id || payload.agendamento_id));
       if (!agd) return { success: false, error: 'Agendamento não encontrado.' };
 
       agd.status = 'Concluido';
@@ -668,22 +970,31 @@ function handleLocalAction(action, payload) {
       produtos.forEach(pItem => {
         const prod = appState.produtos.find(p => p.id === pItem.id);
         if (prod) {
-          const qtd = parseInt(pItem.qtd) || 1;
+          const qtd = parseInt(pItem.qtd || pItem.quantidade) || 1;
           prod.estoque = Math.max(0, (parseInt(prod.estoque) || 0) - qtd);
         }
       });
 
       // Se houver produtos, anexa o registro da comanda conjunta ao agendamento
+      let subtotalProdutos = 0;
       if (produtos.length > 0) {
         agd.produtos_comanda = produtos;
-        const subtotalProdutos = produtos.reduce((acc, p) => acc + (parseFloat(p.preco) * parseInt(p.qtd)), 0);
-        agd.total_comanda = (parseFloat(agd.servico_preco) || 0) + subtotalProdutos;
+        subtotalProdutos = produtos.reduce((acc, p) => acc + (parseFloat(p.preco) * parseInt(p.qtd || p.quantidade || 1)), 0);
       }
+      const totalVenda = (parseFloat(agd.servico_preco) || 0) + subtotalProdutos;
+      agd.total_comanda = totalVenda;
+      agd.total_venda = totalVenda;
+
+      // Cálculo financeiro de taxa e compensação bancária
+      const calc = calcularTaxaECompensacao(totalVenda, agd.forma_pagamento, appState.config, agd.data);
+      agd.taxa_aplicada_valor = calc.taxaAplicadaValor;
+      agd.valor_liquido = calc.valorLiquido;
+      agd.data_compensacao = calc.dataCompensacao;
 
       saveLocalData();
       return {
         success: true,
-        message: 'Comanda finalizada com sucesso! Estoque e caixa atualizados.'
+        message: 'Comanda finalizada com sucesso! Estoque, taxa da maquininha e caixa atualizados.'
       };
     }
 
@@ -814,27 +1125,46 @@ async function handleLoginGestor(event) {
   const submitBtn = event.target.querySelector('button[type="submit"]');
   setButtonLoading(submitBtn, true, 'Autenticando...');
 
-  const usuario = document.getElementById('input-usuario-gestor') ? document.getElementById('input-usuario-gestor').value.trim() : 'admin';
+  const usuario = document.getElementById('input-usuario-gestor') ? document.getElementById('input-usuario-gestor').value.trim() : '';
   const senha = document.getElementById('input-senha-gestor').value.trim();
 
   const res = await callGAS('loginGestor', { usuario, senha });
   setButtonLoading(submitBtn, false);
 
   if (res && res.success) {
-    // Verificação de Primeiro Acesso com a senha padrão 'admin123'
-    if (res.primeiroAcessoGestor || senha === 'admin123') {
+    // 1. Perfil Super Admin (Rafael_Martins)
+    if (res.perfil === 'master' || usuario.toLowerCase() === 'rafael_martins') {
+      currentSession = { perfil: 'master', usuario: 'Rafael_Martins', nome: 'Rafael Martins (Dono do SaaS)' };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
+      showToast('Bem-vindo ao Painel Master, Rafael Martins!', 'success');
+      showView('master');
+      renderMasterView();
+      return;
+    }
+
+    // 2. Verificação de Primeiro Acesso com a senha padrão 'abc123'
+    if (res.primeiroAcessoGestor || senha === 'abc123') {
       openModal('modal-primeiro-acesso-gestor');
       return;
     }
 
-    currentSession = { perfil: 'gestor' };
+    // 3. Gestor de Barbearia Regular
+    currentSession = {
+      perfil: 'gestor',
+      barbearia_id: res.barbearia_id || '',
+      nome_barbearia: res.nome_barbearia || '',
+      usuario: res.usuario || usuario
+    };
+    if (res.nome_barbearia) {
+      appState.config.nome_barbearia = res.nome_barbearia;
+    }
     localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
     showToast('Bem-vindo, Gestor!', 'success');
     showView('gestor');
     renderGestorView();
     refreshData(true);
   } else if (res && res.bloqueado) {
-    exibirTelaBloqueioSaaS();
+    exibirTelaBloqueioSaaS(res);
   } else {
     showToast(res ? (res.error || 'Senha ou usuário incorretos.') : 'Erro ao autenticar.', 'error');
   }
@@ -859,10 +1189,13 @@ async function handleSalvarPrimeiroAcessoGestor(event) {
   const submitBtn = event.target.querySelector('button[type="submit"]');
   setButtonLoading(submitBtn, true, 'Salvando nova senha...');
 
+  const usuario = document.getElementById('input-usuario-gestor')?.value.trim() || '';
   const res = await callGAS('alterarSenhaGestor', {
-    senhaAtual: 'admin123',
+    senhaAtual: 'abc123',
     novaSenha: s1,
-    force: true
+    force: true,
+    barbearia_id: currentSession?.barbearia_id || '',
+    login_gestor: usuario
   });
   setButtonLoading(submitBtn, false);
 
@@ -872,7 +1205,7 @@ async function handleSalvarPrimeiroAcessoGestor(event) {
     saveLocalData();
     showToast('Senha pessoal do gestor cadastrada com sucesso! Bem-vindo.', 'success');
 
-    currentSession = { perfil: 'gestor' };
+    currentSession = { perfil: 'gestor', usuario: usuario };
     localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
     showView('gestor');
     renderGestorView();
@@ -921,15 +1254,16 @@ async function handleAlterarSenhaGestorForm(event) {
   }
 }
 
-function exibirTelaBloqueioSaaS() {
+function exibirTelaBloqueioSaaS(bloqueioInfo) {
   const cfg = appState.config || {};
+  const nomeBarb = (bloqueioInfo && bloqueioInfo.nome_barbearia) || cfg.nome_barbearia || 'Barbearia';
   const elNome = document.getElementById('bloqueio-nome-barbearia');
-  if (elNome) elNome.textContent = cfg.nome_barbearia || 'GESTÃO PROFISSIONAL DE BARBEARIA';
+  if (elNome) elNome.textContent = nomeBarb;
 
   const btnWhats = document.getElementById('btn-whatsapp-bloqueio');
   if (btnWhats) {
-    const zap = (cfg.suporte_whatsapp || '5511999999999').replace(/\D/g, '');
-    const txt = encodeURIComponent(`Olá, sou da barbearia ${cfg.nome_barbearia || 'Barbearia'} e gostaria de regularizar a assinatura do sistema.`);
+    const zap = (bloqueioInfo?.suporte_whatsapp || appState.masterConfig?.suporte_whatsapp || cfg.suporte_whatsapp || '5511999999999').replace(/\D/g, '');
+    const txt = encodeURIComponent(`Olá Rafael Martins, sou da barbearia "${nomeBarb}" e gostaria de regularizar/renovar minha assinatura do sistema via PIX.`);
     btnWhats.href = `https://wa.me/${zap}?text=${txt}`;
   }
   openModal('modal-saas-bloqueado');
@@ -1025,7 +1359,10 @@ function checkExistingSession() {
   if (sess) {
     try {
       currentSession = JSON.parse(sess);
-      if (currentSession.perfil === 'gestor') {
+      if (currentSession.perfil === 'master') {
+        showView('master');
+        renderMasterView();
+      } else if (currentSession.perfil === 'gestor') {
         showView('gestor');
         renderGestorView();
       } else if (currentSession.perfil === 'barbeiro') {
@@ -1043,22 +1380,34 @@ function checkExistingSession() {
 
 function logout() {
   currentSession = null;
+  appState.isAuditMode = false;
+  appState.currentAuditedBarbearia = null;
+  const auditBanner = document.getElementById('gestor-audit-banner');
+  if (auditBanner) auditBanner.classList.add('hidden');
   localStorage.removeItem(SESSION_KEY);
   showView('auth');
   showToast('Sessão encerrada com sucesso.', 'info');
 }
 
 function showView(view) {
-  document.getElementById('auth-screen').classList.add('hidden');
-  document.getElementById('gestor-view').classList.add('hidden');
-  document.getElementById('barbeiro-view').classList.add('hidden');
+  const authEl = document.getElementById('auth-screen');
+  const gestorEl = document.getElementById('gestor-view');
+  const barbeiroEl = document.getElementById('barbeiro-view');
+  const masterEl = document.getElementById('master-view');
 
-  if (view === 'gestor') {
-    document.getElementById('gestor-view').classList.remove('hidden');
+  if (authEl) authEl.classList.add('hidden');
+  if (gestorEl) gestorEl.classList.add('hidden');
+  if (barbeiroEl) barbeiroEl.classList.add('hidden');
+  if (masterEl) masterEl.classList.add('hidden');
+
+  if (view === 'master') {
+    if (masterEl) masterEl.classList.remove('hidden');
+  } else if (view === 'gestor') {
+    if (gestorEl) gestorEl.classList.remove('hidden');
   } else if (view === 'barbeiro') {
-    document.getElementById('barbeiro-view').classList.remove('hidden');
+    if (barbeiroEl) barbeiroEl.classList.remove('hidden');
   } else {
-    document.getElementById('auth-screen').classList.remove('hidden');
+    if (authEl) authEl.classList.remove('hidden');
   }
 
   if (window.lucide) lucide.createIcons();
@@ -1119,6 +1468,47 @@ function updateUIBranding() {
 
   const inputPix = document.getElementById('config-chave-pix');
   if (inputPix && cfg.chave_pix) inputPix.value = cfg.chave_pix;
+
+  // Taxas e Prazos Bancários
+  const inputTaxaPix = document.getElementById('config-taxa-pix-pct');
+  if (inputTaxaPix && cfg.taxa_pix_pct !== undefined) inputTaxaPix.value = cfg.taxa_pix_pct;
+  const inputPrazoPix = document.getElementById('config-prazo-pix-dias');
+  if (inputPrazoPix && cfg.prazo_pix_dias !== undefined) inputPrazoPix.value = cfg.prazo_pix_dias;
+
+  const inputTaxaDebito = document.getElementById('config-taxa-debito-pct');
+  if (inputTaxaDebito && cfg.taxa_debito_pct !== undefined) inputTaxaDebito.value = cfg.taxa_debito_pct;
+  const inputPrazoDebito = document.getElementById('config-prazo-debito-dias');
+  if (inputPrazoDebito && cfg.prazo_debito_dias !== undefined) inputPrazoDebito.value = cfg.prazo_debito_dias;
+
+  const inputTaxaCredito = document.getElementById('config-taxa-credito-pct');
+  if (inputTaxaCredito && cfg.taxa_credito_pct !== undefined) inputTaxaCredito.value = cfg.taxa_credito_pct;
+  const inputPrazoCredito = document.getElementById('config-prazo-credito-dias');
+  if (inputPrazoCredito && cfg.prazo_credito_dias !== undefined) inputPrazoCredito.value = cfg.prazo_credito_dias;
+
+  // Atualiza tags de taxas nos botões de pagamento da comanda
+  const tagTaxaPix = document.getElementById('finalizar-tag-taxa-pix');
+  if (tagTaxaPix) tagTaxaPix.textContent = `${cfg.taxa_pix_pct ?? 0}% TAXA`;
+  const tagPrazoPix = document.getElementById('finalizar-tag-prazo-pix');
+  if (tagPrazoPix) {
+    const d = parseInt(cfg.prazo_pix_dias) || 0;
+    tagPrazoPix.textContent = d === 0 ? 'Compensa na hora (D+0)' : `Compensa em D+${d} dia${d === 1 ? ' útil' : 's úteis'}`;
+  }
+
+  const tagTaxaDeb = document.getElementById('finalizar-tag-taxa-debito');
+  if (tagTaxaDeb) tagTaxaDeb.textContent = `${cfg.taxa_debito_pct ?? 1.99}% TAXA`;
+  const tagPrazoDeb = document.getElementById('finalizar-tag-prazo-debito');
+  if (tagPrazoDeb) {
+    const d = parseInt(cfg.prazo_debito_dias) || 1;
+    tagPrazoDeb.textContent = d === 0 ? 'Compensa na hora (D+0)' : `Compensação em D+${d} dia${d === 1 ? ' útil' : 's úteis'}`;
+  }
+
+  const tagTaxaCred = document.getElementById('finalizar-tag-taxa-credito');
+  if (tagTaxaCred) tagTaxaCred.textContent = `${cfg.taxa_credito_pct ?? 3.99}% TAXA`;
+  const tagPrazoCred = document.getElementById('finalizar-tag-prazo-credito');
+  if (tagPrazoCred) {
+    const d = parseInt(cfg.prazo_credito_dias) || 30;
+    tagPrazoCred.textContent = `Compensação em D+${d} dia${d === 1 ? '' : 's'}`;
+  }
 
   // Atualiza Badge de Licença SaaS
   const badgeLicenca = document.getElementById('badge-status-licenca');
@@ -1291,35 +1681,105 @@ function calcularFinanceiroGeral() {
   const hoje = getHojeString();
   const mesAtual = hoje.substring(0, 7);
 
-  let faturamentoHoje = 0;
+  let faturamentoBrutoTotal = 0;
+  let totalTaxasRetidas = 0;
+  let faturamentoLiquidoTotal = 0;
+
+  let faturamentoHojeBruto = 0;
+  let faturamentoHojeTaxas = 0;
+  let faturamentoHojeLiquido = 0;
   let qtdHojeConcluidos = 0;
-  let faturamentoMes = 0;
-  let totalEntradas = 0;
+
+  let faturamentoMesBruto = 0;
+  let faturamentoMesLiquido = 0;
+
   let totalDinheiroEntrada = 0;
-  let porForma = { Dinheiro: 0, PIX: 0, Cartao_Debito: 0, Cartao_Credito: 0 };
+  let totalDisponivelCompensado = 0;
+  let totalAReceberFuturo = 0;
+  const lancamentosFuturos = [];
+
+  let porForma = {
+    Dinheiro: { bruto: 0, taxa: 0, liquido: 0 },
+    PIX: { bruto: 0, taxa: 0, liquido: 0 },
+    Cartao_Debito: { bruto: 0, taxa: 0, liquido: 0 },
+    Cartao_Credito: { bruto: 0, taxa: 0, liquido: 0 }
+  };
 
   (appState.agendamentos || []).forEach(a => {
     if (a.status === 'Concluido') {
-      const preco = parseFloat(a.servico_preco) || 0;
-      totalEntradas += preco;
+      const valorBruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
+      const forma = a.forma_pagamento || 'Dinheiro';
 
+      // Taxas e compensação bancária
+      let taxaValor = 0;
+      let valorLiquido = valorBruto;
+      let dataComp = a.data || hoje;
+      let taxaPct = 0;
+
+      if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined && a.data_compensacao) {
+        taxaValor = parseFloat(a.taxa_aplicada_valor) || 0;
+        valorLiquido = parseFloat(a.valor_liquido) || 0;
+        dataComp = a.data_compensacao;
+      } else {
+        const calc = calcularTaxaECompensacao(valorBruto, forma, appState.config, a.data);
+        taxaValor = calc.taxaAplicadaValor;
+        valorLiquido = calc.valorLiquido;
+        dataComp = calc.dataCompensacao;
+        taxaPct = calc.taxaPct;
+      }
+
+      faturamentoBrutoTotal += valorBruto;
+      totalTaxasRetidas += taxaValor;
+      faturamentoLiquidoTotal += valorLiquido;
+
+      // Por forma de pagamento
+      const fKey = porForma.hasOwnProperty(forma) ? forma : 'Dinheiro';
+      porForma[fKey].bruto += valorBruto;
+      porForma[fKey].taxa += taxaValor;
+      porForma[fKey].liquido += valorLiquido;
+
+      // Hoje
       if (a.data === hoje) {
-        faturamentoHoje += preco;
+        faturamentoHojeBruto += valorBruto;
+        faturamentoHojeTaxas += taxaValor;
+        faturamentoHojeLiquido += valorLiquido;
         qtdHojeConcluidos++;
       }
+
+      // Mês
       if (a.data && a.data.startsWith(mesAtual)) {
-        faturamentoMes += preco;
+        faturamentoMesBruto += valorBruto;
+        faturamentoMesLiquido += valorLiquido;
       }
 
-      const forma = a.forma_pagamento || 'Dinheiro';
-      if (porForma.hasOwnProperty(forma)) {
-        porForma[forma] += preco;
-      }
+      // Dinheiro físico na gaveta
       if (forma === 'Dinheiro') {
-        totalDinheiroEntrada += preco;
+        totalDinheiroEntrada += valorBruto;
+      } else {
+        // PIX / Cartões
+        if (dataComp <= hoje) {
+          totalDisponivelCompensado += valorLiquido;
+        } else {
+          totalAReceberFuturo += valorLiquido;
+          lancamentosFuturos.push({
+            id: a.id,
+            cliente_nome: a.cliente_nome,
+            servico_nome: a.servico_nome,
+            barbeiro_nome: a.barbeiro_nome,
+            data: a.data,
+            data_compensacao: dataComp,
+            forma_pagamento: forma,
+            taxa_pct: taxaPct || (forma === 'Cartao_Credito' ? (appState.config?.taxa_credito_pct || 3.99) : (forma === 'Cartao_Debito' ? (appState.config?.taxa_debito_pct || 1.99) : (appState.config?.taxa_pix_pct || 0))),
+            valor_bruto: valorBruto,
+            taxa_aplicada_valor: taxaValor,
+            valor_liquido: valorLiquido
+          });
+        }
       }
     }
   });
+
+  lancamentosFuturos.sort((a, b) => (a.data_compensacao || '').localeCompare(b.data_compensacao || ''));
 
   let totalSangrias = 0;
   (appState.sangrias || []).forEach(s => {
@@ -1337,7 +1797,9 @@ function calcularFinanceiroGeral() {
   });
 
   const saldoDinheiroEspecie = Math.max(0, totalDinheiroEntrada - totalSangrias - pagamentosBarbeirosDinheiro);
-  const saldoCaixaLiquido = Math.max(0, totalEntradas - totalSangrias - totalPagamentosBarbeiros);
+  const pagamentosNaoDinheiro = totalPagamentosBarbeiros - pagamentosBarbeirosDinheiro;
+  const saldoDisponivelHoje = Math.max(0, saldoDinheiroEspecie + totalDisponivelCompensado - pagamentosNaoDinheiro);
+  const saldoCaixaLiquido = Math.max(0, faturamentoLiquidoTotal - totalSangrias - totalPagamentosBarbeiros);
 
   let totalComissoesPendentes = 0;
   (appState.barbeiros || []).forEach(b => {
@@ -1346,14 +1808,25 @@ function calcularFinanceiroGeral() {
   });
 
   return {
-    faturamentoHoje,
+    faturamentoHoje: faturamentoHojeBruto,
+    faturamentoHojeBruto,
+    faturamentoHojeTaxas,
+    faturamentoHojeLiquido,
     qtdHojeConcluidos,
-    faturamentoMes,
-    totalEntradas,
+    faturamentoMes: faturamentoMesBruto,
+    faturamentoMesBruto,
+    faturamentoMesLiquido,
+    faturamentoBrutoTotal,
+    totalEntradas: faturamentoBrutoTotal,
+    totalTaxasRetidas,
+    faturamentoLiquidoTotal,
     totalSangrias,
     totalPagamentosBarbeiros,
     saldoCaixaLiquido,
     saldoDinheiroEspecie,
+    saldoDisponivelHoje,
+    totalAReceberFuturo,
+    lancamentosFuturos,
     totalComissoesPendentes,
     porForma
   };
@@ -2068,12 +2541,100 @@ async function cancelarAgendamento(agendamentoId) {
 function renderCaixa() {
   const fin = calcularFinanceiroGeral();
 
-  document.getElementById('caixa-saldo-especie').textContent = formatarMoeda(fin.saldoDinheiroEspecie);
-  document.getElementById('caixa-total-entradas').textContent = formatarMoeda(fin.totalEntradas);
-  document.getElementById('caixa-total-sangrias').textContent = formatarMoeda(fin.totalSangrias);
-  document.getElementById('caixa-total-pagamentos-barbeiros').textContent = formatarMoeda(fin.totalPagamentosBarbeiros);
+  // Linha 1: Faturamento e Taxas
+  const elEntradas = document.getElementById('caixa-total-entradas');
+  if (elEntradas) elEntradas.textContent = formatarMoeda(fin.faturamentoBrutoTotal);
 
+  const elTaxas = document.getElementById('caixa-total-taxas');
+  if (elTaxas) elTaxas.textContent = `- ${formatarMoeda(fin.totalTaxasRetidas)}`;
+
+  const elLiquido = document.getElementById('caixa-total-liquido');
+  if (elLiquido) elLiquido.textContent = formatarMoeda(fin.faturamentoLiquidoTotal);
+
+  const elEspecie = document.getElementById('caixa-saldo-especie');
+  if (elEspecie) elEspecie.textContent = formatarMoeda(fin.saldoDinheiroEspecie);
+
+  // Linha 2: Disponível Hoje vs Futuro
+  const elDispHoje = document.getElementById('caixa-saldo-disponivel-hoje');
+  if (elDispHoje) elDispHoje.textContent = formatarMoeda(fin.saldoDisponivelHoje);
+
+  const elReceberFuturo = document.getElementById('caixa-total-a-receber-futuro');
+  if (elReceberFuturo) elReceberFuturo.textContent = formatarMoeda(fin.totalAReceberFuturo);
+
+  const elQtdFuturos = document.getElementById('caixa-qtd-lancamentos-futuros');
+  if (elQtdFuturos) {
+    const q = (fin.lancamentosFuturos || []).length;
+    elQtdFuturos.textContent = `${q} lançamento${q === 1 ? '' : 's'} aguardando compensação`;
+  }
+
+  const elSangrias = document.getElementById('caixa-total-sangrias');
+  if (elSangrias) elSangrias.textContent = formatarMoeda(fin.totalSangrias);
+
+  const elPagtosBarbeiros = document.getElementById('caixa-total-pagamentos-barbeiros');
+  if (elPagtosBarbeiros) elPagtosBarbeiros.textContent = formatarMoeda(fin.totalPagamentosBarbeiros);
+
+  renderTabelaLancamentosFuturos(fin.lancamentosFuturos, fin.totalAReceberFuturo);
   renderExtratoCaixa();
+}
+
+function renderTabelaLancamentosFuturos(futuros, totalFuturo) {
+  const tbody = document.getElementById('tabela-caixa-futuros-tbody');
+  const badgeTotal = document.getElementById('caixa-futuros-badge-total');
+  if (badgeTotal) badgeTotal.textContent = `Total a Compensar: ${formatarMoeda(totalFuturo || 0)}`;
+  if (!tbody) return;
+
+  if (!futuros || futuros.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="p-8 text-center text-slate-500">
+          <div class="flex flex-col items-center justify-center gap-2">
+            <i data-lucide="check-circle-2" class="w-8 h-8 text-emerald-400/60"></i>
+            <span class="text-xs font-medium text-slate-400">Nenhum lançamento futuro pendente. Todas as transações em cartão/PIX já compensaram!</span>
+          </div>
+        </td>
+      </tr>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  const hoje = getHojeString();
+  let html = '';
+  futuros.forEach(f => {
+    const dataVenda = formatarDataPt(f.data);
+    const dataComp = formatarDataPt(f.data_compensacao);
+
+    let badgePrazo = '';
+    if (f.data_compensacao === hoje) {
+      badgePrazo = '<span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-bold">Compensa Hoje</span>';
+    } else {
+      badgePrazo = `<span class="bg-purple-500/10 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded text-[10px] font-bold">Cai em ${dataComp}</span>`;
+    }
+
+    const badgeForma = f.forma_pagamento === 'Cartao_Credito'
+      ? `<span class="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-[10px] font-bold">Crédito (${f.taxa_pct}%)</span>`
+      : (f.forma_pagamento === 'Cartao_Debito'
+        ? `<span class="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded text-[10px] font-bold">Débito (${f.taxa_pct}%)</span>`
+        : `<span class="bg-gold-500/20 text-gold-300 px-2 py-0.5 rounded text-[10px] font-bold">${formatarFormaPagamento(f.forma_pagamento)} (${f.taxa_pct}%)</span>`);
+
+    html += `
+      <tr class="hover:bg-dark-900/40 transition-colors">
+        <td class="p-3 text-slate-400 font-mono text-[11px]">${dataVenda}</td>
+        <td class="p-3">${badgePrazo}</td>
+        <td class="p-3 text-slate-200">
+          <div class="font-medium text-white">${f.servico_nome}</div>
+          <div class="text-[10px] text-slate-400">${f.cliente_nome} (Barb. ${f.barbeiro_nome})</div>
+        </td>
+        <td class="p-3">${badgeForma}</td>
+        <td class="p-3 text-right font-semibold text-slate-300">${formatarMoeda(f.valor_bruto)}</td>
+        <td class="p-3 text-right font-bold text-rose-400">- ${formatarMoeda(f.taxa_aplicada_valor)}</td>
+        <td class="p-3 text-right font-black text-purple-300">${formatarMoeda(f.valor_liquido)}</td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = html;
+  if (window.lucide) lucide.createIcons();
 }
 
 function renderExtratoCaixa() {
@@ -2084,33 +2645,54 @@ function renderExtratoCaixa() {
 
   (appState.agendamentos || []).forEach(a => {
     if (a.status === 'Concluido') {
+      const bruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
+      let taxa = 0;
+      let liquido = bruto;
+
+      if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined) {
+        taxa = parseFloat(a.taxa_aplicada_valor) || 0;
+        liquido = parseFloat(a.valor_liquido) || 0;
+      } else {
+        const calc = calcularTaxaECompensacao(bruto, a.forma_pagamento, appState.config, a.data);
+        taxa = calc.taxaAplicadaValor;
+        liquido = calc.valorLiquido;
+      }
+
       movimentos.push({
         data_hora: a.criado_em || (a.data + ' ' + (a.horario || '12:00') + ':00'),
         tipo: 'ENTRADA',
         descricao: `Atendimento: ${a.servico_nome} (${a.cliente_nome} - Barb. ${a.barbeiro_nome})`,
         forma: a.forma_pagamento || 'Dinheiro',
-        valor: parseFloat(a.servico_preco) || 0
+        valor_bruto: bruto,
+        taxa_valor: taxa,
+        valor_liquido: liquido
       });
     }
   });
 
   (appState.sangrias || []).forEach(s => {
+    const val = parseFloat(s.valor) || 0;
     movimentos.push({
       data_hora: s.data_hora,
       tipo: 'SANGRIA',
       descricao: `Sangria: ${s.motivo || 'Retirada de Caixa'}`,
       forma: 'Dinheiro (Gaveta)',
-      valor: -(parseFloat(s.valor) || 0)
+      valor_bruto: -val,
+      taxa_valor: 0,
+      valor_liquido: -val
     });
   });
 
   (appState.pagamentosBarbeiros || []).forEach(p => {
+    const val = parseFloat(p.valor) || 0;
     movimentos.push({
       data_hora: p.data_hora,
       tipo: 'PAGTO_BARBEIRO',
       descricao: `Pagamento de Comissão: ${p.barbeiro_nome} (${p.observacao || 'Acerto'})`,
       forma: p.forma_pagamento || 'PIX',
-      valor: -(parseFloat(p.valor) || 0)
+      valor_bruto: -val,
+      taxa_valor: 0,
+      valor_liquido: -val
     });
   });
 
@@ -2119,7 +2701,7 @@ function renderExtratoCaixa() {
   if (movimentos.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" class="p-8 text-center text-slate-500">
+        <td colspan="7" class="p-8 text-center text-slate-500">
           Nenhuma movimentação no caixa registrada até o momento.
         </td>
       </tr>
@@ -2129,15 +2711,17 @@ function renderExtratoCaixa() {
 
   let html = '';
   movimentos.forEach(m => {
-    const isEntrada = m.valor > 0;
+    const isEntrada = m.valor_bruto > 0;
     const badge = isEntrada
       ? '<span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-bold">ENTRADA</span>'
       : (m.tipo === 'SANGRIA'
         ? '<span class="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded text-[10px] font-bold">SANGRIA</span>'
         : '<span class="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] font-bold">PAGTO BARBEIRO</span>');
 
-    const valorFormatado = (isEntrada ? '+ ' : '- ') + formatarMoeda(Math.abs(m.valor));
-    const valorCor = isEntrada ? 'text-emerald-400' : 'text-rose-400';
+    const strBruto = (isEntrada ? '+ ' : '- ') + formatarMoeda(Math.abs(m.valor_bruto));
+    const strTaxa = m.taxa_valor > 0 ? `- ${formatarMoeda(m.taxa_valor)}` : 'R$ 0,00';
+    const strLiquido = (isEntrada ? '+ ' : '- ') + formatarMoeda(Math.abs(m.valor_liquido));
+    const corLiquido = isEntrada ? 'text-emerald-400' : 'text-rose-400';
 
     html += `
       <tr class="hover:bg-dark-900/40 transition-colors">
@@ -2145,7 +2729,9 @@ function renderExtratoCaixa() {
         <td class="p-3">${badge}</td>
         <td class="p-3 text-slate-200 font-medium">${m.descricao}</td>
         <td class="p-3 text-slate-300">${formatarFormaPagamento(m.forma)}</td>
-        <td class="p-3 text-right font-extrabold ${valorCor}">${valorFormatado}</td>
+        <td class="p-3 text-right font-semibold text-slate-300">${strBruto}</td>
+        <td class="p-3 text-right font-bold text-rose-400">${strTaxa}</td>
+        <td class="p-3 text-right font-black ${corLiquido}">${strLiquido}</td>
       </tr>
     `;
   });
@@ -2232,22 +2818,57 @@ function calcularFechamentoDiario(dataIso) {
     a.data === dataIso && a.status === 'Concluido'
   );
 
-  let totalArrecadado = 0;
+  let totalBruto = 0;
+  let totalTaxas = 0;
+  let totalLiquido = 0;
   let porForma = {
-    Dinheiro: 0,
-    PIX: 0,
-    Cartao_Debito: 0,
-    Cartao_Credito: 0
+    Dinheiro: { bruto: 0, taxa: 0, liquido: 0 },
+    PIX: { bruto: 0, taxa: 0, liquido: 0 },
+    Cartao_Debito: { bruto: 0, taxa: 0, liquido: 0 },
+    Cartao_Credito: { bruto: 0, taxa: 0, liquido: 0 }
   };
 
+  let disponivelHoje = 0;
+  let aReceberFuturo = 0;
+  let qtdFuturos = 0;
+
   atendimentosDia.forEach(a => {
-    const preco = parseFloat(a.servico_preco) || 0;
-    totalArrecadado += preco;
+    const valorBruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
     const f = a.forma_pagamento || 'Dinheiro';
-    if (porForma.hasOwnProperty(f)) {
-      porForma[f] += preco;
+
+    let taxaValor = 0;
+    let valorLiquido = valorBruto;
+    let dataComp = a.data || dataIso;
+
+    if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined && a.data_compensacao) {
+      taxaValor = parseFloat(a.taxa_aplicada_valor) || 0;
+      valorLiquido = parseFloat(a.valor_liquido) || 0;
+      dataComp = a.data_compensacao;
     } else {
-      porForma.Dinheiro += preco;
+      const calc = calcularTaxaECompensacao(valorBruto, f, appState.config, a.data);
+      taxaValor = calc.taxaAplicadaValor;
+      valorLiquido = calc.valorLiquido;
+      dataComp = calc.dataCompensacao;
+    }
+
+    totalBruto += valorBruto;
+    totalTaxas += taxaValor;
+    totalLiquido += valorLiquido;
+
+    const fKey = porForma.hasOwnProperty(f) ? f : 'Dinheiro';
+    porForma[fKey].bruto += valorBruto;
+    porForma[fKey].taxa += taxaValor;
+    porForma[fKey].liquido += valorLiquido;
+
+    if (f === 'Dinheiro') {
+      // Dinheiro físico cai na gaveta na hora
+    } else {
+      if (dataComp <= dataIso) {
+        disponivelHoje += valorLiquido;
+      } else {
+        aReceberFuturo += valorLiquido;
+        qtdFuturos++;
+      }
     }
   });
 
@@ -2274,49 +2895,78 @@ function calcularFechamentoDiario(dataIso) {
     }
   });
 
-  // 4. Saldo em Gaveta Físico (Dinheiro que deve estar na gaveta)
-  // = Dinheiro arrecadado - Sangrias retiradas - Pagamentos feitos aos barbeiros em dinheiro físico
-  const dinheiroEntrada = porForma.Dinheiro || 0;
+  // 4. Saldo em Gaveta Físico
+  const dinheiroEntrada = porForma.Dinheiro.bruto || 0;
   const saldoGaveta = dinheiroEntrada - totalSangrias - pagamentosDinheiro;
 
-  // 5. Saldo Líquido do Dia (Total arrecadado - despesas/sangrias/acertos)
-  const saldoLiquidoGeral = totalArrecadado - totalSangrias - totalPagamentos;
+  // Disponível hoje na loja e conta (Gaveta + PIX/Cartões D+0 compensados até hoje - saídas não em dinheiro)
+  const pagamentosNaoDinheiro = totalPagamentos - pagamentosDinheiro;
+  const totalDisponivelHoje = Math.max(0, saldoGaveta + disponivelHoje - pagamentosNaoDinheiro);
+
+  // 5. Saldo Líquido do Dia
+  const saldoLiquidoGeral = totalLiquido - totalSangrias - totalPagamentos;
 
   // Atualização dos elementos no DOM
   const elTotalArrecadado = document.getElementById('fechamento-total-arrecadado');
-  if (elTotalArrecadado) elTotalArrecadado.textContent = formatarMoeda(totalArrecadado);
+  if (elTotalArrecadado) elTotalArrecadado.textContent = formatarMoeda(totalBruto);
+
+  const elTotalTaxas = document.getElementById('fechamento-total-taxas');
+  if (elTotalTaxas) elTotalTaxas.textContent = `- ${formatarMoeda(totalTaxas)}`;
+
+  const elTotalLiquido = document.getElementById('fechamento-total-liquido');
+  if (elTotalLiquido) elTotalLiquido.textContent = formatarMoeda(totalLiquido);
 
   const elQtdAtendimentos = document.getElementById('fechamento-qtd-atendimentos');
   if (elQtdAtendimentos) {
     elQtdAtendimentos.textContent = `${atendimentosDia.length} atendimento${atendimentosDia.length === 1 ? '' : 's'} concluído${atendimentosDia.length === 1 ? '' : 's'}`;
   }
 
-  const elTotalSangrias = document.getElementById('fechamento-total-sangrias');
-  if (elTotalSangrias) elTotalSangrias.textContent = formatarMoeda(totalSangrias);
-
-  const elQtdSangrias = document.getElementById('fechamento-qtd-sangrias');
-  if (elQtdSangrias) {
-    elQtdSangrias.textContent = `${sangriasDia.length} retirada${sangriasDia.length === 1 ? '' : 's'}`;
-  }
-
   const elSaldoGaveta = document.getElementById('fechamento-saldo-gaveta');
   if (elSaldoGaveta) {
     elSaldoGaveta.textContent = formatarMoeda(saldoGaveta);
-    elSaldoGaveta.className = `text-xl font-black ${saldoGaveta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+    elSaldoGaveta.className = `text-xl font-black ${saldoGaveta >= 0 ? 'text-white' : 'text-rose-400'}`;
   }
 
+  const elDispHoje = document.getElementById('fechamento-disponivel-hoje');
+  if (elDispHoje) elDispHoje.textContent = formatarMoeda(totalDisponivelHoje);
+
+  const elReceberFuturo = document.getElementById('fechamento-a-receber-futuro');
+  if (elReceberFuturo) elReceberFuturo.textContent = formatarMoeda(aReceberFuturo);
+
+  const elQtdFuturosTag = document.getElementById('fechamento-qtd-futuros-tag');
+  if (elQtdFuturosTag) {
+    elQtdFuturosTag.textContent = `${qtdFuturos} transação${qtdFuturos === 1 ? '' : 'ões'} a compensar`;
+  }
+
+  const elTotalSangrias = document.getElementById('fechamento-total-sangrias');
+  if (elTotalSangrias) elTotalSangrias.textContent = formatarMoeda(totalSangrias);
+
+  // Formas de Pagamento
   const elFormaDinheiro = document.getElementById('fechamento-forma-dinheiro');
-  if (elFormaDinheiro) elFormaDinheiro.textContent = formatarMoeda(porForma.Dinheiro);
+  if (elFormaDinheiro) elFormaDinheiro.textContent = formatarMoeda(porForma.Dinheiro.bruto);
 
   const elFormaPix = document.getElementById('fechamento-forma-pix');
-  if (elFormaPix) elFormaPix.textContent = formatarMoeda(porForma.PIX);
+  if (elFormaPix) elFormaPix.textContent = formatarMoeda(porForma.PIX.bruto);
+  const elPixLiq = document.getElementById('fechamento-pix-liquido-tag');
+  if (elPixLiq) elPixLiq.textContent = `Líq: ${formatarMoeda(porForma.PIX.liquido)}`;
+  const elBadgePix = document.getElementById('fechamento-badge-taxa-pix');
+  if (elBadgePix) elBadgePix.textContent = `${appState.config?.taxa_pix_pct ?? 0}%`;
 
   const elFormaDebito = document.getElementById('fechamento-forma-debito');
-  if (elFormaDebito) elFormaDebito.textContent = formatarMoeda(porForma.Cartao_Debito);
+  if (elFormaDebito) elFormaDebito.textContent = formatarMoeda(porForma.Cartao_Debito.bruto);
+  const elDebLiq = document.getElementById('fechamento-debito-liquido-tag');
+  if (elDebLiq) elDebLiq.textContent = `Líq: ${formatarMoeda(porForma.Cartao_Debito.liquido)}`;
+  const elBadgeDeb = document.getElementById('fechamento-badge-taxa-debito');
+  if (elBadgeDeb) elBadgeDeb.textContent = `${appState.config?.taxa_debito_pct ?? 1.99}%`;
 
   const elFormaCredito = document.getElementById('fechamento-forma-credito');
-  if (elFormaCredito) elFormaCredito.textContent = formatarMoeda(porForma.Cartao_Credito);
+  if (elFormaCredito) elFormaCredito.textContent = formatarMoeda(porForma.Cartao_Credito.bruto);
+  const elCredLiq = document.getElementById('fechamento-credito-liquido-tag');
+  if (elCredLiq) elCredLiq.textContent = `Líq: ${formatarMoeda(porForma.Cartao_Credito.liquido)}`;
+  const elBadgeCred = document.getElementById('fechamento-badge-taxa-credito');
+  if (elBadgeCred) elBadgeCred.textContent = `${appState.config?.taxa_credito_pct ?? 3.99}%`;
 
+  // Sangrias
   const elSubtotalSangrias = document.getElementById('fechamento-subtotal-sangrias');
   if (elSubtotalSangrias) elSubtotalSangrias.textContent = formatarMoeda(totalSangrias);
 
@@ -2342,8 +2992,9 @@ function calcularFechamentoDiario(dataIso) {
     }
   }
 
+  // Atendimentos do Dia
   const elSubtotalServicos = document.getElementById('fechamento-subtotal-servicos');
-  if (elSubtotalServicos) elSubtotalServicos.textContent = formatarMoeda(totalArrecadado);
+  if (elSubtotalServicos) elSubtotalServicos.textContent = formatarMoeda(totalBruto);
 
   const listaAtendimentos = document.getElementById('fechamento-lista-atendimentos');
   if (listaAtendimentos) {
@@ -2352,6 +3003,18 @@ function calcularFechamentoDiario(dataIso) {
     } else {
       let h = '';
       atendimentosDia.forEach(a => {
+        const bruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
+        let taxa = 0;
+        let liq = bruto;
+        if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined) {
+          taxa = parseFloat(a.taxa_aplicada_valor) || 0;
+          liq = parseFloat(a.valor_liquido) || 0;
+        } else {
+          const calc = calcularTaxaECompensacao(bruto, a.forma_pagamento, appState.config, a.data);
+          taxa = calc.taxaAplicadaValor;
+          liq = calc.valorLiquido;
+        }
+
         h += `
           <div class="flex items-center justify-between p-2 rounded-lg bg-dark-800/80 border border-dark-700/60 text-xs">
             <div class="flex items-center gap-2">
@@ -2359,11 +3022,13 @@ function calcularFechamentoDiario(dataIso) {
               <div>
                 <span class="text-white font-medium">${a.servico_nome}</span>
                 <span class="text-slate-400 text-[11px]"> (${a.cliente_nome} - ${a.barbeiro_nome})</span>
+                <div class="text-[10px] text-slate-400">${formatarFormaPagamento(a.forma_pagamento)}</div>
               </div>
             </div>
             <div class="text-right">
-              <span class="text-emerald-400 font-bold">${formatarMoeda(a.servico_preco)}</span>
-              <div class="text-[10px] text-slate-400 font-medium">${formatarFormaPagamento(a.forma_pagamento)}</div>
+              <span class="text-slate-200 font-bold">${formatarMoeda(bruto)}</span>
+              ${taxa > 0 ? `<div class="text-[10px] text-rose-400 font-medium">Taxa: -${formatarMoeda(taxa)}</div>` : ''}
+              <div class="text-[10px] text-emerald-400 font-bold">Líq: ${formatarMoeda(liq)}</div>
             </div>
           </div>
         `;
@@ -2395,14 +3060,53 @@ function imprimirFechamentoCaixa() {
     a.data === dataIso && a.status === 'Concluido'
   );
 
-  let totalArrecadado = 0;
-  let porForma = { Dinheiro: 0, PIX: 0, Cartao_Debito: 0, Cartao_Credito: 0 };
+  let totalBruto = 0;
+  let totalTaxas = 0;
+  let totalLiquido = 0;
+  let porForma = {
+    Dinheiro: { bruto: 0, taxa: 0, liquido: 0 },
+    PIX: { bruto: 0, taxa: 0, liquido: 0 },
+    Cartao_Debito: { bruto: 0, taxa: 0, liquido: 0 },
+    Cartao_Credito: { bruto: 0, taxa: 0, liquido: 0 }
+  };
+
+  let disponivelHoje = 0;
+  let aReceberFuturo = 0;
+
   atendimentosDia.forEach(a => {
-    const preco = parseFloat(a.servico_preco) || 0;
-    totalArrecadado += preco;
+    const valorBruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
     const f = a.forma_pagamento || 'Dinheiro';
-    if (porForma[f] !== undefined) porForma[f] += preco;
-    else porForma.Dinheiro += preco;
+
+    let taxaValor = 0;
+    let valorLiquido = valorBruto;
+    let dataComp = a.data || dataIso;
+
+    if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined && a.data_compensacao) {
+      taxaValor = parseFloat(a.taxa_aplicada_valor) || 0;
+      valorLiquido = parseFloat(a.valor_liquido) || 0;
+      dataComp = a.data_compensacao;
+    } else {
+      const calc = calcularTaxaECompensacao(valorBruto, f, appState.config, a.data);
+      taxaValor = calc.taxaAplicadaValor;
+      valorLiquido = calc.valorLiquido;
+      dataComp = calc.dataCompensacao;
+    }
+
+    totalBruto += valorBruto;
+    totalTaxas += taxaValor;
+    totalLiquido += valorLiquido;
+
+    const fKey = porForma.hasOwnProperty(f) ? f : 'Dinheiro';
+    porForma[fKey].bruto += valorBruto;
+    porForma[fKey].taxa += taxaValor;
+    porForma[fKey].liquido += valorLiquido;
+
+    if (f === 'Dinheiro') {
+      // Dinheiro físico
+    } else {
+      if (dataComp <= dataIso) disponivelHoje += valorLiquido;
+      else aReceberFuturo += valorLiquido;
+    }
   });
 
   const sangriasDia = (appState.sangrias || []).filter(s => 
@@ -2422,8 +3126,10 @@ function imprimirFechamentoCaixa() {
     if (p.forma_pagamento === 'Dinheiro') pagamentosDinheiro += val;
   });
 
-  const saldoGaveta = (porForma.Dinheiro || 0) - totalSangrias - pagamentosDinheiro;
-  const saldoLiquidoGeral = totalArrecadado - totalSangrias - totalPagamentos;
+  const saldoGaveta = (porForma.Dinheiro.bruto || 0) - totalSangrias - pagamentosDinheiro;
+  const pagamentosNaoDinheiro = totalPagamentos - pagamentosDinheiro;
+  const saldoDispHoje = Math.max(0, saldoGaveta + disponivelHoje - pagamentosNaoDinheiro);
+  const saldoLiquidoGeral = totalLiquido - totalSangrias - totalPagamentos;
 
   let sangriasHtml = '';
   if (sangriasDia.length > 0) {
@@ -2438,7 +3144,29 @@ function imprimirFechamentoCaixa() {
   let servicosHtml = '';
   if (atendimentosDia.length > 0) {
     atendimentosDia.forEach(a => {
-      servicosHtml += `<div style="display:flex; justify-content:space-between; margin:2px 0;"><span>${a.horario || '--:--'} ${a.servico_nome} (${a.cliente_nome}) [${formatarFormaPagamento(a.forma_pagamento)}]:</span><span>${formatarMoeda(a.servico_preco)}</span></div>`;
+      const bruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
+      let taxa = 0;
+      let liq = bruto;
+      if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined) {
+        taxa = parseFloat(a.taxa_aplicada_valor) || 0;
+        liq = parseFloat(a.valor_liquido) || 0;
+      } else {
+        const calc = calcularTaxaECompensacao(bruto, a.forma_pagamento, appState.config, a.data);
+        taxa = calc.taxaAplicadaValor;
+        liq = calc.valorLiquido;
+      }
+      servicosHtml += `
+        <div style="border-bottom:1px dotted #ccc; padding:3px 0; margin-bottom:2px;">
+          <div style="display:flex; justify-content:space-between;">
+            <span><strong>${a.horario || '--:--'}</strong> ${a.servico_nome} (${a.cliente_nome})</span>
+            <span>${formatarMoeda(bruto)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:9px; color:#555;">
+            <span>${formatarFormaPagamento(a.forma_pagamento)} ${taxa > 0 ? `(Taxa: -${formatarMoeda(taxa)})` : ''}</span>
+            <span style="font-weight:bold; color:#000;">Líq: ${formatarMoeda(liq)}</span>
+          </div>
+        </div>
+      `;
     });
   } else {
     servicosHtml = `<div style="color:#666;">Nenhum atendimento concluído.</div>`;
@@ -2449,21 +3177,33 @@ function imprimirFechamentoCaixa() {
       <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
         <h2 style="font-size: 15px; margin: 0; font-weight: bold; text-transform: uppercase;">${nomeBarbearia}</h2>
         ${tel ? `<p style="margin: 2px 0 0; font-size: 10px;">Contato: ${tel}</p>` : ''}
-        <h3 style="font-size: 12px; margin: 4px 0 0; font-weight: bold;">FECHAMENTO DE CAIXA DIÁRIO</h3>
+        <h3 style="font-size: 12px; margin: 4px 0 0; font-weight: bold;">FECHAMENTO DE CAIXA & MAQUININHA</h3>
         <p style="margin: 2px 0 0; font-size: 11px;">Data de Referência: <strong>${formatarDataPt(dataIso)}</strong></p>
         <p style="font-size: 9px; margin: 2px 0 0; color: #444;">Impresso em: ${getHojeAgoraString()}</p>
       </div>
 
       <div style="border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
-        <div style="font-weight: bold; margin-bottom: 4px;">ARRECADAÇÃO POR FORMA DE PAGAMENTO:</div>
-        <div style="display: flex; justify-content: space-between;"><span>💵 Dinheiro (Espécie):</span><span>${formatarMoeda(porForma.Dinheiro)}</span></div>
-        <div style="display: flex; justify-content: space-between;"><span>⚡ PIX:</span><span>${formatarMoeda(porForma.PIX)}</span></div>
-        <div style="display: flex; justify-content: space-between;"><span>💳 Cartão Débito:</span><span>${formatarMoeda(porForma.Cartao_Debito)}</span></div>
-        <div style="display: flex; justify-content: space-between;"><span>💳 Cartão Crédito:</span><span>${formatarMoeda(porForma.Cartao_Credito)}</span></div>
-        <div style="display: flex; justify-content: space-between; font-weight: bold; margin-top: 4px; border-top: 1px dotted #000; padding-top: 4px;">
-          <span>TOTAL ARRECADADO (${atendimentosDia.length} atend.):</span>
-          <span>${formatarMoeda(totalArrecadado)}</span>
+        <div style="font-weight: bold; margin-bottom: 4px;">FATURAMENTO BRUTO x LÍQUIDO:</div>
+        <div style="display: flex; justify-content: space-between;"><span>Total Bruto Cobrado:</span><span>${formatarMoeda(totalBruto)}</span></div>
+        <div style="display: flex; justify-content: space-between; color:#c00;"><span>Taxas de Maquininha:</span><span>-${formatarMoeda(totalTaxas)}</span></div>
+        <div style="display: flex; justify-content: space-between; font-weight: bold; border-top: 1px dotted #000; padding-top: 3px; margin-top: 3px;">
+          <span>FATURAMENTO LÍQUIDO REAL:</span><span>${formatarMoeda(totalLiquido)}</span>
         </div>
+      </div>
+
+      <div style="border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
+        <div style="font-weight: bold; margin-bottom: 4px;">ARRECADAÇÃO POR FORMA DE PAGAMENTO:</div>
+        <div style="display: flex; justify-content: space-between;"><span>💵 Dinheiro:</span><span>${formatarMoeda(porForma.Dinheiro.bruto)}</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>⚡ PIX (Líq: ${formatarMoeda(porForma.PIX.liquido)}):</span><span>${formatarMoeda(porForma.PIX.bruto)}</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>💳 Débito (Líq: ${formatarMoeda(porForma.Cartao_Debito.liquido)}):</span><span>${formatarMoeda(porForma.Cartao_Debito.bruto)}</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>💳 Crédito (Líq: ${formatarMoeda(porForma.Cartao_Credito.liquido)}):</span><span>${formatarMoeda(porForma.Cartao_Credito.bruto)}</span></div>
+      </div>
+
+      <div style="border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
+        <div style="font-weight: bold; margin-bottom: 4px;">DISPONIBILIDADE & PREVISÃO DE CAIXA:</div>
+        <div style="display: flex; justify-content: space-between; font-weight: bold;"><span>SALDO ESPERADO EM GAVETA:</span><span>${formatarMoeda(saldoGaveta)}</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>Disponível Hoje (Caixa/Conta):</span><span>${formatarMoeda(saldoDispHoje)}</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>A Receber Futuro (Cartão):</span><span>${formatarMoeda(aReceberFuturo)}</span></div>
       </div>
 
       <div style="border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
@@ -2475,20 +3215,14 @@ function imprimirFechamentoCaixa() {
 
       <div style="border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 8px;">
         <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold;">
-          <span>SALDO ESPERADO EM GAVETA:</span>
-          <span>${formatarMoeda(saldoGaveta)}</span>
-        </div>
-        <div style="font-size: 9px; color: #555;">(Dinheiro físico em espécie esperado no caixa)</div>
-        
-        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; margin-top: 6px;">
-          <span>SALDO LÍQUIDO DO DIA:</span>
+          <span>SALDO LÍQUIDO FINAL DO DIA:</span>
           <span>${formatarMoeda(saldoLiquidoGeral)}</span>
         </div>
-        <div style="font-size: 9px; color: #555;">(Total arrecadado menos sangrias e acertos)</div>
+        <div style="font-size: 9px; color: #555;">(Líquido real menos despesas e comissões)</div>
       </div>
 
       <div style="border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; font-size: 10px;">
-        <div style="font-weight: bold; margin-bottom: 4px;">RESUMO DE ATENDIMENTOS DO DIA:</div>
+        <div style="font-weight: bold; margin-bottom: 4px;">ATENDIMENTOS DO DIA (${atendimentosDia.length}):</div>
         ${servicosHtml}
       </div>
 
@@ -2521,51 +3255,107 @@ function exportarFechamentoCSV(dataIso) {
     p.data_hora && p.data_hora.startsWith(dataIso)
   );
 
-  let totalArrecadado = 0;
-  let porForma = { Dinheiro: 0, PIX: 0, Cartao_Debito: 0, Cartao_Credito: 0 };
+  let totalBruto = 0;
+  let totalTaxas = 0;
+  let totalLiquido = 0;
+  let porForma = {
+    Dinheiro: { bruto: 0, taxa: 0, liquido: 0 },
+    PIX: { bruto: 0, taxa: 0, liquido: 0 },
+    Cartao_Debito: { bruto: 0, taxa: 0, liquido: 0 },
+    Cartao_Credito: { bruto: 0, taxa: 0, liquido: 0 }
+  };
+  let disponivelHoje = 0;
+  let aReceberFuturo = 0;
+
   atendimentosDia.forEach(a => {
-    const val = parseFloat(a.servico_preco) || 0;
-    totalArrecadado += val;
+    const valorBruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
     const f = a.forma_pagamento || 'Dinheiro';
-    if (porForma.hasOwnProperty(f)) porForma[f] += val;
-    else porForma.Dinheiro += val;
+
+    let taxaValor = 0;
+    let valorLiquido = valorBruto;
+    let dataComp = a.data || dataIso;
+
+    if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined && a.data_compensacao) {
+      taxaValor = parseFloat(a.taxa_aplicada_valor) || 0;
+      valorLiquido = parseFloat(a.valor_liquido) || 0;
+      dataComp = a.data_compensacao;
+    } else {
+      const calc = calcularTaxaECompensacao(valorBruto, f, appState.config, a.data);
+      taxaValor = calc.taxaAplicadaValor;
+      valorLiquido = calc.valorLiquido;
+      dataComp = calc.dataCompensacao;
+    }
+
+    totalBruto += valorBruto;
+    totalTaxas += taxaValor;
+    totalLiquido += valorLiquido;
+
+    const fKey = porForma.hasOwnProperty(f) ? f : 'Dinheiro';
+    porForma[fKey].bruto += valorBruto;
+    porForma[fKey].taxa += taxaValor;
+    porForma[fKey].liquido += valorLiquido;
+
+    if (f === 'Dinheiro') {
+      // Dinheiro físico
+    } else {
+      if (dataComp <= dataIso) disponivelHoje += valorLiquido;
+      else aReceberFuturo += valorLiquido;
+    }
   });
 
   const totalSangrias = sangriasDia.reduce((acc, s) => acc + (parseFloat(s.valor) || 0), 0);
   const totalPagamentos = pagamentosDia.reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0);
   const pagamentosDinheiro = pagamentosDia.filter(p => p.forma_pagamento === 'Dinheiro').reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0);
 
-  const saldoGaveta = (porForma.Dinheiro || 0) - totalSangrias - pagamentosDinheiro;
-  const saldoLiquido = totalArrecadado - totalSangrias - totalPagamentos;
+  const saldoGaveta = (porForma.Dinheiro.bruto || 0) - totalSangrias - pagamentosDinheiro;
+  const pagamentosNaoDinheiro = totalPagamentos - pagamentosDinheiro;
+  const saldoDispHoje = Math.max(0, saldoGaveta + disponivelHoje - pagamentosNaoDinheiro);
+  const saldoLiquidoGeral = totalLiquido - totalSangrias - totalPagamentos;
 
   // Montagem do arquivo CSV formatado em ponto-e-vírgula com UTF-8 BOM
   let csv = '\uFEFF';
-  csv += `RELATÓRIO DE FECHAMENTO DE CAIXA DIÁRIO\n`;
+  csv += `RELATÓRIO DE FECHAMENTO DE CAIXA & MAQUININHA DIÁRIO\n`;
   csv += `Barbearia;${nomeBarbearia}\n`;
   csv += `Data de Referência;${formatarDataPt(dataIso)}\n`;
   csv += `Gerado em;${getHojeAgoraString()}\n\n`;
 
-  csv += `RESUMO FINANCEIRO\n`;
+  csv += `RESUMO FINANCEIRO CONSOLIDADO\n`;
   csv += `Métrica;Valor (R$)\n`;
-  csv += `Total Arrecadado (Serviços e Vendas);${totalArrecadado.toFixed(2)}\n`;
-  csv += `Total de Sangrias Retiradas;-${totalSangrias.toFixed(2)}\n`;
-  csv += `Total de Acertos / Comissões Pagas;-${totalPagamentos.toFixed(2)}\n`;
+  csv += `Total Bruto Cobrado dos Clientes;${totalBruto.toFixed(2)}\n`;
+  csv += `Total de Taxas de Maquininha / Operadoras;-${totalTaxas.toFixed(2)}\n`;
+  csv += `Faturamento Líquido Real da Barbearia;${totalLiquido.toFixed(2)}\n`;
   csv += `Saldo Físico em Gaveta (Espécie);${saldoGaveta.toFixed(2)}\n`;
-  csv += `Saldo Líquido Geral do Dia;${saldoLiquido.toFixed(2)}\n\n`;
+  csv += `Saldo Disponível Imediato (Caixa/Conta);${saldoDispHoje.toFixed(2)}\n`;
+  csv += `A Receber Futuro (Lançamentos a Compensar);${aReceberFuturo.toFixed(2)}\n`;
+  csv += `Total de Sangrias Retiradas;-${totalSangrias.toFixed(2)}\n`;
+  csv += `Total de Comissões / Acertos Pagos;-${totalPagamentos.toFixed(2)}\n`;
+  csv += `Saldo Líquido Geral do Dia;${saldoLiquidoGeral.toFixed(2)}\n\n`;
 
   csv += `DETALHAMENTO POR FORMA DE PAGAMENTO\n`;
-  csv += `Forma de Pagamento;Total (R$)\n`;
-  csv += `Dinheiro (Espécie);${(porForma.Dinheiro || 0).toFixed(2)}\n`;
-  csv += `PIX;${(porForma.PIX || 0).toFixed(2)}\n`;
-  csv += `Cartão de Débito;${(porForma.Cartao_Debito || 0).toFixed(2)}\n`;
-  csv += `Cartão de Crédito;${(porForma.Cartao_Credito || 0).toFixed(2)}\n\n`;
+  csv += `Forma de Pagamento;Valor Bruto (R$);Taxa Operadora (R$);Valor Líquido (R$)\n`;
+  csv += `Dinheiro (Espécie);${porForma.Dinheiro.bruto.toFixed(2)};0.00;${porForma.Dinheiro.liquido.toFixed(2)}\n`;
+  csv += `PIX;${porForma.PIX.bruto.toFixed(2)};${porForma.PIX.taxa.toFixed(2)};${porForma.PIX.liquido.toFixed(2)}\n`;
+  csv += `Cartão de Débito;${porForma.Cartao_Debito.bruto.toFixed(2)};${porForma.Cartao_Debito.taxa.toFixed(2)};${porForma.Cartao_Debito.liquido.toFixed(2)}\n`;
+  csv += `Cartão de Crédito;${porForma.Cartao_Credito.bruto.toFixed(2)};${porForma.Cartao_Credito.taxa.toFixed(2)};${porForma.Cartao_Credito.liquido.toFixed(2)}\n\n`;
 
   csv += `ATENDIMENTOS CONCLUÍDOS NO DIA\n`;
-  csv += `Horário;Cliente;Telefone;Serviço;Barbeiro;Forma de Pagamento;Valor (R$);Comissão (R$)\n`;
+  csv += `Horário;Cliente;Telefone;Serviço;Barbeiro;Forma de Pagamento;Valor Bruto (R$);Taxa Maquininha (R$);Valor Líquido (R$);Data Compensação;Comissão Barbeiro (R$)\n`;
   atendimentosDia.forEach(a => {
-    const val = parseFloat(a.servico_preco) || 0;
+    const bruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
+    let taxa = 0;
+    let liq = bruto;
+    let dtComp = a.data_compensacao || a.data || dataIso;
+    if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined) {
+      taxa = parseFloat(a.taxa_aplicada_valor) || 0;
+      liq = parseFloat(a.valor_liquido) || 0;
+    } else {
+      const calc = calcularTaxaECompensacao(bruto, a.forma_pagamento, appState.config, a.data);
+      taxa = calc.taxaAplicadaValor;
+      liq = calc.valorLiquido;
+      dtComp = calc.dataCompensacao;
+    }
     const com = parseFloat(a.comissao_valor) || 0;
-    csv += `"${a.horario || '--:--'}";"${a.cliente_nome}";"${a.cliente_telefone || ''}";"${a.servico_nome}";"${a.barbeiro_nome}";"${formatarFormaPagamento(a.forma_pagamento)}";${val.toFixed(2)};${com.toFixed(2)}\n`;
+    csv += `"${a.horario || '--:--'}";"${a.cliente_nome}";"${a.cliente_telefone || ''}";"${a.servico_nome}";"${a.barbeiro_nome}";"${formatarFormaPagamento(a.forma_pagamento)}";${bruto.toFixed(2)};${taxa.toFixed(2)};${liq.toFixed(2)};"${formatarDataPt(dtComp)}";${com.toFixed(2)}\n`;
   });
   csv += `\n`;
 
@@ -3126,17 +3916,30 @@ async function handleSalvarConfiguracoes(event) {
   const tel = document.getElementById('config-telefone-barbearia').value.trim();
   const pix = document.getElementById('config-chave-pix').value.trim();
   const elSenhaGestor = document.getElementById('config-senha-gestor');
-  const senhaGestor = elSenhaGestor && elSenhaGestor.value.trim() ? elSenhaGestor.value.trim() : (appState.config?.senha_gestor || 'admin123');
-  const gasUrl = document.getElementById('config-gas-url').value.trim();
+  const senhaGestor = elSenhaGestor && elSenhaGestor.value.trim() ? elSenhaGestor.value.trim() : (appState.config?.senha_gestor || 'abc123');
+  const gasUrl = document.getElementById('config-gas-url') ? document.getElementById('config-gas-url').value.trim() : '';
 
-  setGASUrl(gasUrl);
+  const taxaPix = parseFloat(document.getElementById('config-taxa-pix-pct')?.value) || 0;
+  const prazoPix = parseInt(document.getElementById('config-prazo-pix-dias')?.value) || 0;
+  const taxaDeb = parseFloat(document.getElementById('config-taxa-debito-pct')?.value) || 0;
+  const prazoDeb = parseInt(document.getElementById('config-prazo-debito-dias')?.value) || 0;
+  const taxaCred = parseFloat(document.getElementById('config-taxa-credito-pct')?.value) || 0;
+  const prazoCred = parseInt(document.getElementById('config-prazo-credito-dias')?.value) || 0;
+
+  if (gasUrl) setGASUrl(gasUrl);
 
   const novaConfig = {
     nome_barbearia: nome,
     logo_url: logo,
     telefone_barbearia: tel,
     chave_pix: pix,
-    senha_gestor: senhaGestor
+    senha_gestor: senhaGestor,
+    taxa_pix_pct: taxaPix,
+    prazo_pix_dias: prazoPix,
+    taxa_debito_pct: taxaDeb,
+    prazo_debito_dias: prazoDeb,
+    taxa_credito_pct: taxaCred,
+    prazo_credito_dias: prazoCred
   };
 
   setButtonLoading(submitBtn, true, 'Atualizando...');
@@ -3673,4 +4476,640 @@ function getHojeAgoraString() {
   const data = d.toISOString().split('T')[0];
   const hora = d.toTimeString().split(' ')[0];
   return `${data} ${hora}`;
+}
+
+// =========================================================================
+// 12. MÓDULO PAINEL MASTER (SUPER ADMIN - RAFAEL MARTINS)
+// =========================================================================
+let currentMasterStatusFilter = 'todas';
+
+function getDataFutura(dias) {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().split('T')[0];
+}
+
+function getDataPassada(dias) {
+  const d = new Date();
+  d.setDate(d.getDate() - dias);
+  return d.toISOString().split('T')[0];
+}
+
+function gerarLoginGestorBarbearia(nome) {
+  if (!nome) return 'Barbearia_Gestor';
+  const limpo = String(nome).normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const ignorar = ['de', 'da', 'do', 'dos', 'das', 'e', '&', 'barbearia'];
+  const palavras = limpo.split(/\s+/).filter(p => {
+    const pLower = p.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return pLower.length > 0 && !ignorar.includes(pLower);
+  });
+
+  const base = palavras.length > 0 ? palavras : limpo.split(/\s+/).filter(p => p.length > 0);
+
+  const camelCase = base.map(p => {
+    const str = p.replace(/[^a-zA-Z0-9]/g, '');
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }).join('');
+
+  return 'Barbearia_' + (camelCase || 'Gestor');
+}
+
+function previewLoginGestor(nome) {
+  const loginGerado = gerarLoginGestorBarbearia(nome);
+  const el = document.getElementById('master-preview-login');
+  if (el) el.textContent = loginGerado;
+}
+
+function setMasterStatusFilter(status) {
+  currentMasterStatusFilter = status;
+  const botoes = {
+    todas: document.getElementById('master-filter-todas'),
+    em_dia: document.getElementById('master-filter-em_dia'),
+    vencidas: document.getElementById('master-filter-vencidas'),
+    bloqueadas: document.getElementById('master-filter-bloqueadas')
+  };
+
+  Object.keys(botoes).forEach(k => {
+    const btn = botoes[k];
+    if (!btn) return;
+    if (k === status) {
+      btn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold bg-gold-500 text-dark-900 shadow';
+    } else {
+      btn.className = 'px-3 py-1.5 rounded-lg text-xs font-medium bg-dark-900 text-slate-400 border border-dark-700 hover:text-white';
+    }
+  });
+
+  renderMasterView();
+}
+
+function filterMasterTable() {
+  renderMasterView();
+}
+
+async function renderMasterView() {
+  const tbody = document.getElementById('master-barbearias-tbody');
+  if (!tbody) return;
+
+  // Busca lista atualizada da planilha ou do estado local
+  if (getGASUrl()) {
+    const res = await callGAS('getMasterBarbearias');
+    if (res && res.success && res.barbearias) {
+      appState.masterBarbearias = res.barbearias;
+      saveLocalData();
+    }
+  }
+
+  const barbearias = appState.masterBarbearias || [];
+  const hoje = getHojeString();
+
+  // 1. Cálculos de KPIs
+  const total = barbearias.length;
+  let emDia = 0;
+  let bloqueadasOuVencidas = 0;
+  let receitaTotalPix = 0;
+
+  barbearias.forEach(b => {
+    const isBloqueada = b.status_licenca === 'BLOQUEADA';
+    const isVencida = b.data_vencimento && b.data_vencimento < hoje;
+    if (isBloqueada || isVencida) {
+      bloqueadasOuVencidas++;
+    } else {
+      emDia++;
+    }
+    receitaTotalPix += parseFloat(b.valor_pago) || 0;
+  });
+
+  const elTotal = document.getElementById('master-kpi-total');
+  const elEmDia = document.getElementById('master-kpi-em-dia');
+  const elBloq = document.getElementById('master-kpi-bloqueadas');
+  const elPix = document.getElementById('master-kpi-receita-pix');
+
+  if (elTotal) elTotal.textContent = total;
+  if (elEmDia) elEmDia.textContent = emDia;
+  if (elBloq) elBloq.textContent = bloqueadasOuVencidas;
+  if (elPix) elPix.textContent = formatarMoeda(receitaTotalPix);
+
+  // 2. Filtro de Busca e Status
+  const search = (document.getElementById('master-search-input')?.value || '').toLowerCase().trim();
+  const filtradas = barbearias.filter(b => {
+    const matchSearch = !search ||
+      (b.nome_barbearia || '').toLowerCase().includes(search) ||
+      (b.responsavel || '').toLowerCase().includes(search) ||
+      (b.login_gestor || '').toLowerCase().includes(search) ||
+      (b.telefone || '').includes(search);
+
+    if (!matchSearch) return false;
+
+    const isBloqueada = b.status_licenca === 'BLOQUEADA';
+    const isVencida = b.data_vencimento && b.data_vencimento < hoje;
+
+    if (currentMasterStatusFilter === 'em_dia') return !isBloqueada && !isVencida;
+    if (currentMasterStatusFilter === 'vencidas') return isVencida;
+    if (currentMasterStatusFilter === 'bloqueadas') return isBloqueada;
+    return true;
+  });
+
+  if (filtradas.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="p-8 text-center text-slate-500">
+          <i data-lucide="building-2" class="w-8 h-8 mx-auto mb-2 text-slate-600"></i>
+          Nenhuma barbearia encontrada para o filtro selecionado.
+        </td>
+      </tr>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  let html = '';
+  filtradas.forEach(b => {
+    const isBloqueada = b.status_licenca === 'BLOQUEADA';
+    const isVencida = b.data_vencimento && b.data_vencimento < hoje;
+    
+    // Cálculo de dias restantes / atraso
+    let vencBadge = '';
+    if (b.data_vencimento) {
+      const diffMs = new Date(b.data_vencimento + 'T23:59:59') - new Date();
+      const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+      if (diffDias < 0) {
+        vencBadge = `<span class="bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2 py-0.5 rounded-full text-[10px] font-extrabold block mt-0.5">VENCIDA HÁ ${Math.abs(diffDias)} DIAS</span>`;
+      } else if (diffDias === 0) {
+        vencBadge = `<span class="bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded-full text-[10px] font-extrabold block mt-0.5">VENCE HOJE</span>`;
+      } else if (diffDias <= 5) {
+        vencBadge = `<span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold block mt-0.5">Vence em ${diffDias} dias</span>`;
+      } else {
+        vencBadge = `<span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-semibold block mt-0.5">Vence em ${diffDias} dias</span>`;
+      }
+    }
+
+    const zapLimpo = limparTelefone(b.telefone);
+    const zapLink = zapLimpo ? `https://wa.me/55${zapLimpo}?text=Ol%C3%A1%20${encodeURIComponent(b.responsavel || b.nome_barbearia)},%20sou%20Rafael%20Martins%20do%20sistema%20SaaS%20de%20Barbearia.` : '#';
+
+    html += `
+      <tr class="hover:bg-dark-800/60 transition-colors">
+        <td class="p-3.5">
+          <div class="font-bold text-white text-sm">${b.nome_barbearia}</div>
+          <div class="text-[11px] text-slate-400">${b.responsavel || 'Responsável não informado'}</div>
+        </td>
+
+        <td class="p-3.5 font-mono">
+          <div class="text-gold-400 font-bold bg-dark-900/80 px-2 py-1 rounded-lg border border-dark-700 inline-block text-[11px]">
+            ${b.login_gestor}
+          </div>
+          <div class="text-[10px] text-slate-500 mt-0.5">
+            ${b.senha_gestor === 'abc123' ? '<span class="text-amber-400 font-medium">Senha inicial (abc123)</span>' : '<span class="text-emerald-400">Senha pessoal ativa</span>'}
+          </div>
+        </td>
+
+        <td class="p-3.5">
+          <div class="text-slate-300">${b.telefone || '--'}</div>
+          ${zapLimpo ? `
+            <a href="${zapLink}" target="_blank" class="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-medium mt-0.5">
+              <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
+              <span>Abrir WhatsApp</span>
+            </a>
+          ` : ''}
+        </td>
+
+        <td class="p-3.5">
+          <div class="font-bold text-slate-200">${b.plano || 'Mensal'}</div>
+          <div class="text-[11px] text-gold-400 font-semibold">${formatarMoeda(b.valor_pago || 0)} <span class="text-[10px] text-slate-500">(PIX)</span></div>
+        </td>
+
+        <td class="p-3.5">
+          <div class="font-medium text-slate-200">${formatarDataPt(b.data_vencimento)}</div>
+          ${vencBadge}
+        </td>
+
+        <td class="p-3.5 text-center">
+          ${isBloqueada ? `
+            <span class="inline-flex items-center gap-1 bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
+              <i data-lucide="lock" class="w-3 h-3"></i>
+              <span>BLOQUEADA</span>
+            </span>
+          ` : isVencida ? `
+            <span class="inline-flex items-center gap-1 bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
+              <i data-lucide="alert-triangle" class="w-3 h-3"></i>
+              <span>VENCIDA</span>
+            </span>
+          ` : `
+            <span class="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
+              <i data-lucide="check-circle" class="w-3 h-3"></i>
+              <span>ATIVA</span>
+            </span>
+          `}
+        </td>
+
+        <td class="p-3.5 text-right">
+          <div class="flex items-center justify-end gap-1.5">
+            <!-- Travar/Destravar -->
+            <button onclick="toggleStatusLicencaMasterAction('${b.id}', '${b.status_licenca}')" title="${isBloqueada ? 'Destravar Barbearia' : 'Travar Acesso da Barbearia'}" class="p-2 rounded-xl text-xs font-semibold ${isBloqueada ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30' : 'bg-dark-900 text-slate-400 hover:text-white border border-dark-700'} transition-all">
+              <i data-lucide="${isBloqueada ? 'unlock' : 'lock'}" class="w-4 h-4"></i>
+            </button>
+
+            <!-- Renovar Assinatura PIX -->
+            <button onclick="openModalRenovarAssinaturaMaster('${b.id}')" title="Registrar Pagamento PIX e Renovar Vencimento" class="p-2 bg-gold-500/10 text-gold-400 hover:bg-gold-500/20 border border-gold-500/30 rounded-xl transition-all">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            </button>
+
+            <!-- Auditar / Entrar no Painel -->
+            <button onclick="auditarBarbearia('${b.id}')" title="Auditar / Visualizar Painel Desta Barbearia" class="p-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl transition-all">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+
+            <!-- Resetar Senha Gestor -->
+            <button onclick="resetSenhaGestorPrompt('${b.id}')" title="Resetar Senha do Gestor para 'abc123'" class="p-2 bg-dark-900 text-slate-400 hover:text-amber-400 border border-dark-700 rounded-xl transition-all">
+              <i data-lucide="key" class="w-4 h-4"></i>
+            </button>
+
+            <!-- Excluir Barbearia -->
+            <button onclick="excluirBarbeariaPrompt('${b.id}')" title="Excluir Barbearia" class="p-2 bg-dark-900 text-slate-500 hover:text-rose-400 border border-dark-700 rounded-xl transition-all">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = html;
+  if (window.lucide) lucide.createIcons();
+}
+
+function openModalCadastrarBarbearia() {
+  document.getElementById('master-barbearia-id').value = '';
+  document.getElementById('master-input-nome').value = '';
+  document.getElementById('master-input-responsavel').value = '';
+  document.getElementById('master-input-telefone').value = '';
+  document.getElementById('master-input-api-url').value = '';
+  document.getElementById('master-input-plano').value = 'Mensal';
+  document.getElementById('master-input-valor').value = '149.90';
+  document.getElementById('master-input-vencimento').value = getDataFutura(30);
+  previewLoginGestor('');
+  openModal('modal-cadastrar-barbearia');
+}
+
+function autoPreencherPlanoMaster(plano) {
+  const inputValor = document.getElementById('master-input-valor');
+  const inputVenc = document.getElementById('master-input-vencimento');
+
+  if (plano === 'Mensal') {
+    if (inputValor) inputValor.value = '149.90';
+    if (inputVenc) inputVenc.value = getDataFutura(30);
+  } else if (plano === 'Trimestral') {
+    if (inputValor) inputValor.value = '399.90';
+    if (inputVenc) inputVenc.value = getDataFutura(90);
+  } else if (plano === 'Semestral') {
+    if (inputValor) inputValor.value = '699.90';
+    if (inputVenc) inputVenc.value = getDataFutura(180);
+  } else if (plano === 'Anual') {
+    if (inputValor) inputValor.value = '1199.90';
+    if (inputVenc) inputVenc.value = getDataFutura(365);
+  }
+}
+
+async function handleSalvarMasterBarbearia(event) {
+  event.preventDefault();
+  const submitBtn = event.target.querySelector('button[type="submit"]');
+  setButtonLoading(submitBtn, true, 'Cadastrando barbearia...');
+
+  const id = document.getElementById('master-barbearia-id').value;
+  const nome = document.getElementById('master-input-nome').value.trim();
+  const responsavel = document.getElementById('master-input-responsavel').value.trim();
+  const telefone = document.getElementById('master-input-telefone').value.trim();
+  const apiUrl = document.getElementById('master-input-api-url').value.trim();
+  const plano = document.getElementById('master-input-plano').value;
+  const valor = parseFloat(document.getElementById('master-input-valor').value) || 0;
+  const vencimento = document.getElementById('master-input-vencimento').value;
+
+  const barbearia = {
+    id: id || undefined,
+    nome_barbearia: nome,
+    responsavel: responsavel,
+    telefone: telefone,
+    api_url: apiUrl,
+    plano: plano,
+    valor_pago: valor,
+    forma_pagamento_pix: 'PIX',
+    data_vencimento: vencimento,
+    status_licenca: 'ATIVA'
+  };
+
+  const res = await callGAS('saveMasterBarbearia', { barbearia });
+  setButtonLoading(submitBtn, false);
+
+  if (res && res.success) {
+    closeModal('modal-cadastrar-barbearia');
+    showToast(res.message || 'Barbearia cadastrada com sucesso!', 'success');
+    renderMasterView();
+  } else {
+    showToast(res ? res.error : 'Erro ao cadastrar barbearia.', 'error');
+  }
+}
+
+async function toggleStatusLicencaMasterAction(id, currentStatus) {
+  const novoStatus = currentStatus === 'ATIVA' ? 'BLOQUEADA' : 'ATIVA';
+  const acaoTexto = novoStatus === 'BLOQUEADA' ? 'bloquear o acesso de' : 'liberar o acesso para';
+  
+  if (!confirm(`Tem certeza que deseja ${acaoTexto} esta barbearia?`)) {
+    return;
+  }
+
+  const res = await callGAS('toggleStatusLicencaMaster', { id, status: novoStatus });
+  if (res && res.success) {
+    showToast(res.message || `Status alterado para ${novoStatus}!`, 'success');
+    renderMasterView();
+  } else {
+    showToast(res ? res.error : 'Erro ao alterar status da licença.', 'error');
+  }
+}
+
+function openModalRenovarAssinaturaMaster(id) {
+  const b = (appState.masterBarbearias || []).find(x => x.id === id);
+  if (!b) return;
+
+  document.getElementById('renovar-barbearia-id').value = b.id;
+  document.getElementById('renovar-subtitulo-barbearia').textContent = `${b.nome_barbearia} (${b.responsavel || 'Gestor'})`;
+  document.getElementById('renovar-input-plano').value = b.plano || 'Mensal';
+  document.getElementById('renovar-input-valor').value = b.valor_pago || '149.90';
+  document.getElementById('renovar-input-vencimento').value = getDataFutura(30);
+
+  openModal('modal-renovar-assinatura-master');
+}
+
+function autoPreencherRenovacaoMaster(plano) {
+  const inputValor = document.getElementById('renovar-input-valor');
+  const inputVenc = document.getElementById('renovar-input-vencimento');
+
+  if (plano === 'Mensal') {
+    if (inputValor) inputValor.value = '149.90';
+    if (inputVenc) inputVenc.value = getDataFutura(30);
+  } else if (plano === 'Trimestral') {
+    if (inputValor) inputValor.value = '399.90';
+    if (inputVenc) inputVenc.value = getDataFutura(90);
+  } else if (plano === 'Semestral') {
+    if (inputValor) inputValor.value = '699.90';
+    if (inputVenc) inputVenc.value = getDataFutura(180);
+  } else if (plano === 'Anual') {
+    if (inputValor) inputValor.value = '1199.90';
+    if (inputVenc) inputVenc.value = getDataFutura(365);
+  }
+}
+
+async function handleSalvarRenovacaoMaster(event) {
+  event.preventDefault();
+  const submitBtn = event.target.querySelector('button[type="submit"]');
+  setButtonLoading(submitBtn, true, 'Confirmando PIX...');
+
+  const id = document.getElementById('renovar-barbearia-id').value;
+  const plano = document.getElementById('renovar-input-plano').value;
+  const valor = parseFloat(document.getElementById('renovar-input-valor').value) || 0;
+  const vencimento = document.getElementById('renovar-input-vencimento').value;
+
+  const res = await callGAS('renovarVencimentoMaster', {
+    id: id,
+    novo_plano: plano,
+    valor_pago: valor,
+    novo_vencimento: vencimento
+  });
+  setButtonLoading(submitBtn, false);
+
+  if (res && res.success) {
+    closeModal('modal-renovar-assinatura-master');
+    showToast(res.message || 'Assinatura renovada com sucesso via PIX!', 'success');
+    renderMasterView();
+  } else {
+    showToast(res ? res.error : 'Erro ao renovar assinatura.', 'error');
+  }
+}
+
+async function resetSenhaGestorPrompt(id) {
+  const b = (appState.masterBarbearias || []).find(x => x.id === id);
+  if (!b) return;
+
+  if (!confirm(`Resetar a senha do gestor de "${b.nome_barbearia}" para o padrão temporário "abc123"?`)) {
+    return;
+  }
+
+  const res = await callGAS('resetSenhaGestorMaster', { id });
+  if (res && res.success) {
+    showToast(res.message || 'Senha resetada para "abc123" com sucesso!', 'success');
+    renderMasterView();
+  } else {
+    showToast(res ? res.error : 'Erro ao resetar senha.', 'error');
+  }
+}
+
+async function excluirBarbeariaPrompt(id) {
+  const b = (appState.masterBarbearias || []).find(x => x.id === id);
+  if (!b) return;
+
+  if (!confirm(`Atenção: Tem certeza que deseja excluir permanentemente a barbearia "${b.nome_barbearia}"? Esta ação não pode ser desfeita.`)) {
+    return;
+  }
+
+  const res = await callGAS('deleteMasterBarbearia', { id });
+  if (res && res.success) {
+    showToast(res.message || 'Barbearia excluída com sucesso!', 'success');
+    renderMasterView();
+  } else {
+    showToast(res ? res.error : 'Erro ao excluir barbearia.', 'error');
+  }
+}
+
+function auditarBarbearia(id) {
+  const b = (appState.masterBarbearias || []).find(x => x.id === id);
+  if (!b) return;
+
+  appState.isAuditMode = true;
+  appState.currentAuditedBarbearia = b;
+
+  // Atualiza nome da barbearia no banner de auditoria e na sidebar
+  const elNome = document.getElementById('audit-barbearia-nome');
+  if (elNome) elNome.textContent = b.nome_barbearia;
+
+  const banner = document.getElementById('gestor-audit-banner');
+  if (banner) banner.classList.remove('hidden');
+
+  appState.config.nome_barbearia = b.nome_barbearia;
+  updateUIBranding();
+
+  showToast(`Modo Auditoria ativado: ${b.nome_barbearia}`, 'info');
+  showView('gestor');
+  renderGestorView();
+}
+
+function sairModoAuditoria() {
+  appState.isAuditMode = false;
+  appState.currentAuditedBarbearia = null;
+
+  const banner = document.getElementById('gestor-audit-banner');
+  if (banner) banner.classList.add('hidden');
+
+  showToast('Você retornou ao Painel Master (Super Admin).', 'info');
+  showView('master');
+  renderMasterView();
+}
+
+function exportarRelatorioMasterCSV() {
+  const barbearias = appState.masterBarbearias || [];
+  if (barbearias.length === 0) {
+    showToast('Nenhuma barbearia cadastrada para exportar.', 'warning');
+    return;
+  }
+
+  const hoje = getHojeString();
+  let csv = 'ID;Nome da Barbearia;Responsavel;WhatsApp;Login Gestor;Plano;Valor Pago (R$);Forma Pagamento;Data Vencimento;Status da Licenca;Situacao\n';
+
+  barbearias.forEach(b => {
+    const isVencida = b.data_vencimento && b.data_vencimento < hoje;
+    const situacao = b.status_licenca === 'BLOQUEADA' ? 'BLOQUEADA' : (isVencida ? 'VENCIDA' : 'EM DIA');
+    const valor = (parseFloat(b.valor_pago) || 0).toFixed(2).replace('.', ',');
+
+    csv += `"${b.id}";"${b.nome_barbearia}";"${b.responsavel || ''}";"${b.telefone || ''}";"${b.login_gestor}";"${b.plano || 'Mensal'}";"${valor}";"PIX";"${b.data_vencimento || ''}";"${b.status_licenca}";"${situacao}"\n`;
+  });
+
+  const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Relatorio_Master_Barbearias_${getHojeString()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast('Relatório de Barbearias em CSV baixado com sucesso!', 'success');
+}
+
+function openModalRelatorioMaster() {
+  const barbearias = appState.masterBarbearias || [];
+  const hoje = getHojeString();
+  const container = document.getElementById('relatorio-master-preview-content');
+  if (!container) return;
+
+  let totalEmDia = 0;
+  let totalInadimplentes = 0;
+  let receitaPix = 0;
+
+  barbearias.forEach(b => {
+    const isVencida = b.data_vencimento && b.data_vencimento < hoje;
+    if (b.status_licenca === 'BLOQUEADA' || isVencida) {
+      totalInadimplentes++;
+    } else {
+      totalEmDia++;
+    }
+    receitaPix += parseFloat(b.valor_pago) || 0;
+  });
+
+  let linhas = '';
+  barbearias.forEach((b, idx) => {
+    const isVencida = b.data_vencimento && b.data_vencimento < hoje;
+    const isBloq = b.status_licenca === 'BLOQUEADA';
+    const statusText = isBloq ? 'BLOQUEADA' : (isVencida ? 'VENCIDA' : 'EM DIA');
+    const statusColor = isBloq || isVencida ? 'text-rose-400' : 'text-emerald-400';
+
+    linhas += `
+      <tr class="border-b border-dark-700/60">
+        <td class="p-2.5 font-bold text-white">${idx + 1}. ${b.nome_barbearia}</td>
+        <td class="p-2.5 text-slate-300">${b.responsavel || '--'}</td>
+        <td class="p-2.5 font-mono text-gold-400">${b.login_gestor}</td>
+        <td class="p-2.5 text-slate-300">${b.telefone || '--'}</td>
+        <td class="p-2.5 text-slate-300">${b.plano || 'Mensal'}</td>
+        <td class="p-2.5 font-bold text-gold-400">${formatarMoeda(b.valor_pago || 0)}</td>
+        <td class="p-2.5 font-medium">${formatarDataPt(b.data_vencimento)}</td>
+        <td class="p-2.5 font-bold ${statusColor}">${statusText}</td>
+      </tr>
+    `;
+  });
+
+  container.innerHTML = `
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-dark-900 rounded-2xl border border-dark-700 mb-4">
+      <div>
+        <span class="text-[11px] text-slate-400 block">Total de Assinantes</span>
+        <span class="text-xl font-black text-white">${barbearias.length} barbearias</span>
+      </div>
+      <div>
+        <span class="text-[11px] text-slate-400 block">Assinaturas Em Dia</span>
+        <span class="text-xl font-black text-emerald-400">${totalEmDia}</span>
+      </div>
+      <div>
+        <span class="text-[11px] text-slate-400 block">Faturamento Total PIX</span>
+        <span class="text-xl font-black text-gold-400">${formatarMoeda(receitaPix)}</span>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto rounded-xl border border-dark-700">
+      <table class="w-full text-left text-xs">
+        <thead class="bg-dark-900 text-slate-400 uppercase text-[10px] font-semibold">
+          <tr>
+            <th class="p-2.5">Barbearia</th>
+            <th class="p-2.5">Responsável</th>
+            <th class="p-2.5">Login Gestor</th>
+            <th class="p-2.5">WhatsApp</th>
+            <th class="p-2.5">Plano</th>
+            <th class="p-2.5">Valor PIX</th>
+            <th class="p-2.5">Vencimento</th>
+            <th class="p-2.5">Situação</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-dark-700/60">
+          ${linhas}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  openModal('modal-relatorio-master');
+}
+
+function imprimirRelatorioMaster() {
+  window.print();
+}
+
+function openModalAlterarSenhaMaster() {
+  document.getElementById('input-master-senha-atual').value = '';
+  document.getElementById('input-master-nova-senha').value = '';
+  document.getElementById('input-master-confirma-senha').value = '';
+  openModal('modal-alterar-senha-master');
+}
+
+async function handleSalvarSenhaMaster(event) {
+  event.preventDefault();
+  const sAtual = document.getElementById('input-master-senha-atual').value.trim();
+  const sNova = document.getElementById('input-master-nova-senha').value.trim();
+  const sConf = document.getElementById('input-master-confirma-senha').value.trim();
+
+  if (sNova !== sConf) {
+    showToast('A confirmação da nova senha não confere!', 'error');
+    return;
+  }
+
+  const valid = validarRegraSenha(sNova);
+  if (!valid.valido) {
+    showToast(valid.erro, 'error');
+    return;
+  }
+
+  const submitBtn = event.target.querySelector('button[type="submit"]');
+  setButtonLoading(submitBtn, true, 'Atualizando...');
+
+  const res = await callGAS('alterarSenhaMaster', {
+    senha_atual: sAtual,
+    nova_senha: sNova
+  });
+  setButtonLoading(submitBtn, false);
+
+  if (res && res.success) {
+    closeModal('modal-alterar-senha-master');
+    if (!appState.masterConfig) appState.masterConfig = {};
+    appState.masterConfig.superadmin_senha = sNova;
+    saveLocalData();
+    showToast('Senha do Super Admin alterada com sucesso!', 'success');
+  } else {
+    showToast(res ? res.error : 'Erro ao alterar senha do Super Admin.', 'error');
+  }
 }
