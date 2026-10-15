@@ -950,6 +950,12 @@ function handleLocalAction(action, payload) {
       return { success: true, message: 'Barbeiro salvo com sucesso!' };
     }
 
+    case 'deleteBarbeiro': {
+      appState.barbeiros = (appState.barbeiros || []).filter(x => String(x.id) !== String(payload.id));
+      saveLocalData();
+      return { success: true, message: 'Barbeiro excluído com sucesso!' };
+    }
+
     case 'resetSenhaBarbeiro': {
       const b = appState.barbeiros.find(x => String(x.id) === String(payload.id));
       if (b) {
@@ -1126,7 +1132,14 @@ async function refreshData(force = true) {
 
   setGlobalLoading(true);
 
-  if (currentSession && currentSession.perfil === 'barbeiro') {
+  if (currentSession && currentSession.perfil === 'master') {
+    const res = await callGAS('getMasterBarbearias');
+    if (res && res.success && res.barbearias) {
+      appState.masterBarbearias = res.barbearias;
+      saveLocalData();
+      renderMasterView();
+    }
+  } else if (currentSession && currentSession.perfil === 'barbeiro') {
     // Barbeiro busca apenas seus dados restritos (economia de banda e memória)
     const res = await callGAS('getBarberData', { barbeiro_id: currentSession.barbeiro.id });
     if (res && res.success) {
@@ -2194,6 +2207,28 @@ Podemos confirmar o seu horário? Esperamos por você!`;
   window.open(url, '_blank');
 }
 
+// Ordenação Inteligente da Agenda (Barbeiro e Gestor)
+// 1. Pendentes ('Agendado') no topo ordenados cronologicamente (mais próximo primeiro)
+// 2. Concluídos / Cancelados ao final da fila
+function compararAgendamentosInteligente(a, b) {
+  const isPendenteA = (a.status === 'Agendado');
+  const isPendenteB = (b.status === 'Agendado');
+
+  // a) Prioridade de Status: Agendados sempre no topo
+  if (isPendenteA && !isPendenteB) return -1;
+  if (!isPendenteA && isPendenteB) return 1;
+
+  // b) Entre os pendentes: ordem cronológica crescente (atendimento mais próximo primeiro)
+  if (isPendenteA && isPendenteB) {
+    if (a.data !== b.data) return (a.data || '').localeCompare(b.data || '');
+    return (a.horario || '').localeCompare(b.horario || '');
+  }
+
+  // c) Concluídos / Cancelados: jogados para o final, ordenados do mais recente para o mais antigo
+  if (a.data !== b.data) return (b.data || '').localeCompare(a.data || '');
+  return (b.horario || '').localeCompare(a.horario || '');
+}
+
 function renderAgendamentos() {
   const tbody = document.getElementById('tabela-agendamentos-tbody');
   if (!tbody) return;
@@ -2226,10 +2261,7 @@ function renderAgendamentos() {
     lista = lista.filter(x => x.status === statusFiltro);
   }
 
-  lista.sort((a, b) => {
-    if (a.data !== b.data) return (b.data || '').localeCompare(a.data || '');
-    return (a.horario || '').localeCompare(b.horario || '');
-  });
+  lista.sort(compararAgendamentosInteligente);
 
   if (lista.length === 0) {
     tbody.innerHTML = `
@@ -2435,6 +2467,7 @@ async function handleSalvarAgendamento(event) {
   if (res && res.success) {
     closeModal('modal-agendamento');
     showToast('Agendamento salvo com sucesso!', 'success');
+    await refreshData(true);
     renderGestorView();
   } else {
     showToast(res ? res.error : 'Erro ao salvar agendamento.', 'error');
@@ -2616,6 +2649,7 @@ async function confirmarFinalizacaoComForma(formaPagamento) {
   if (res && res.success) {
     closeModal('modal-finalizar-atendimento');
     showToast(`Comanda finalizada via ${formatarFormaPagamento(formaPagamento)}! Estoque de produtos e caixa atualizados.`, 'success');
+    await refreshData(true);
     renderGestorView();
   } else {
     showToast(res ? res.error : 'Erro ao finalizar atendimento com comanda.', 'error');
@@ -2633,6 +2667,7 @@ async function cancelarAgendamento(agendamentoId) {
 
   if (res && res.success) {
     showToast('Agendamento cancelado!', 'info');
+    await refreshData(true);
     renderGestorView();
   } else {
     showToast(res ? res.error : 'Erro ao cancelar.', 'error');
@@ -2887,6 +2922,7 @@ async function handleSalvarSangria(event) {
   if (res && res.success) {
     closeModal('modal-sangria');
     showToast(`Sangria de ${formatarMoeda(valor)} lançada com sucesso!`, 'success');
+    await refreshData(true);
     renderGestorView();
   } else {
     showToast(res ? res.error : 'Erro ao lançar sangria.', 'error');
@@ -3522,9 +3558,17 @@ function renderBarbeiros() {
               </div>
             </div>
             
-            <button onclick="resetarSenhaBarbeiroPrompt('${b.id}', '${b.nome}')" title="Resetar Senha do Barbeiro" class="text-slate-500 hover:text-amber-400 p-1.5 rounded-lg hover:bg-dark-700 transition-colors">
-              <i data-lucide="key" class="w-4 h-4"></i>
-            </button>
+            <div class="flex items-center gap-1">
+              <button onclick="editarBarbeiro('${b.id}')" title="Editar Barbeiro" class="text-slate-400 hover:text-gold-400 p-1.5 rounded-lg hover:bg-dark-700 transition-colors">
+                <i data-lucide="edit-3" class="w-4 h-4"></i>
+              </button>
+              <button onclick="resetarSenhaBarbeiroPrompt('${b.id}', '${b.nome}')" title="Resetar Senha do Barbeiro" class="text-slate-400 hover:text-amber-400 p-1.5 rounded-lg hover:bg-dark-700 transition-colors">
+                <i data-lucide="key" class="w-4 h-4"></i>
+              </button>
+              <button onclick="excluirBarbeiro('${b.id}')" title="Excluir Barbeiro" class="text-slate-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-dark-700 transition-colors">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
           </div>
 
           <div class="p-3 bg-dark-900/80 rounded-xl border border-dark-700/60 space-y-2 mb-4 text-xs">
@@ -3656,6 +3700,7 @@ async function handleSalvarPagamentoBarbeiro(event) {
   if (res && res.success) {
     closeModal('modal-pagar-barbeiro');
     showToast(`Pagamento de ${formatarMoeda(valor)} registrado com sucesso para ${barbeiroNome}!`, 'success');
+    await refreshData(true);
     renderGestorView();
   } else {
     showToast(res ? res.error : 'Erro ao registrar pagamento.', 'error');
@@ -3663,10 +3708,13 @@ async function handleSalvarPagamentoBarbeiro(event) {
 }
 
 function openModalNovoBarbeiro() {
-  document.getElementById('modal-barbeiro-title').innerHTML = `
-    <i data-lucide="scissors" class="w-5 h-5 text-gold-500"></i>
-    <span>Cadastrar Barbeiro</span>
-  `;
+  const modalTitle = document.getElementById('modal-barbeiro-title');
+  if (modalTitle) {
+    modalTitle.innerHTML = `
+      <i data-lucide="scissors" class="w-5 h-5 text-gold-500"></i>
+      <span>Cadastrar Barbeiro</span>
+    `;
+  }
   document.getElementById('barbeiro-form-id').value = '';
   document.getElementById('barbeiro-form-nome').value = '';
   document.getElementById('barbeiro-form-tel').value = '';
@@ -3674,12 +3722,58 @@ function openModalNovoBarbeiro() {
   document.getElementById('barbeiro-form-login-preview').textContent = 'PrimeiroNome_ÚltimoNome';
 
   openModal('modal-barbeiro');
+  if (window.lucide) lucide.createIcons();
 }
 
 function previewLoginBarbeiro(nome) {
   const preview = document.getElementById('barbeiro-form-login-preview');
   if (preview) {
     preview.textContent = gerarLoginBarbeiro(nome);
+  }
+}
+
+function editarBarbeiro(id) {
+  const b = (appState.barbeiros || []).find(x => String(x.id) === String(id));
+  if (!b) {
+    showToast('Barbeiro não encontrado!', 'error');
+    return;
+  }
+  const modalTitle = document.getElementById('modal-barbeiro-title');
+  if (modalTitle) {
+    modalTitle.innerHTML = `
+      <i data-lucide="edit-3" class="w-5 h-5 text-gold-500"></i>
+      <span>Editar Barbeiro</span>
+    `;
+  }
+  document.getElementById('barbeiro-form-id').value = b.id;
+  document.getElementById('barbeiro-form-nome').value = b.nome || '';
+  document.getElementById('barbeiro-form-tel').value = b.telefone || '';
+  document.getElementById('barbeiro-form-comissao').value = b.comissao_pct !== undefined ? b.comissao_pct : 50;
+
+  const preview = document.getElementById('barbeiro-form-login-preview');
+  if (preview) {
+    preview.textContent = b.login || gerarLoginBarbeiro(b.nome);
+  }
+
+  openModal('modal-barbeiro');
+  if (window.lucide) lucide.createIcons();
+}
+
+async function excluirBarbeiro(id) {
+  const b = (appState.barbeiros || []).find(x => String(x.id) === String(id));
+  const nome = b ? b.nome : 'este barbeiro';
+
+  if (!confirm(`Tem certeza que deseja excluir o barbeiro "${nome}"? Esta ação removerá o profissional e seu acesso ao sistema.`)) {
+    return;
+  }
+
+  const res = await callGAS('deleteBarbeiro', { id });
+  if (res && res.success) {
+    showToast(`Barbeiro "${nome}" excluído com sucesso!`, 'success');
+    await refreshData(true);
+    renderGestorView();
+  } else {
+    showToast(res ? res.error : 'Erro ao excluir barbeiro.', 'error');
   }
 }
 
@@ -3711,6 +3805,7 @@ async function handleSalvarBarbeiro(event) {
   if (res && res.success) {
     closeModal('modal-barbeiro');
     showToast(res.message || 'Barbeiro salvo com sucesso!', 'success');
+    await refreshData(true);
     renderGestorView();
   } else {
     showToast(res ? res.error : 'Erro ao salvar barbeiro.', 'error');
@@ -3725,6 +3820,7 @@ async function resetarSenhaBarbeiroPrompt(id, nome) {
   const res = await callGAS('resetSenhaBarbeiro', { id });
   if (res && res.success) {
     showToast(res.message || `Senha de ${nome} resetada para "abc123" com sucesso!`, 'success');
+    await refreshData(true);
   } else {
     showToast(res ? res.error : 'Erro ao resetar senha.', 'error');
   }
@@ -3805,6 +3901,7 @@ async function handleSalvarCliente(event) {
   if (res && res.success) {
     closeModal('modal-cliente');
     showToast(res.message || 'Cliente salvo!', 'success');
+    await refreshData(true);
     renderGestorView();
   } else {
     showToast(res ? res.error : 'Erro ao salvar cliente.', 'error');
@@ -3816,6 +3913,7 @@ async function excluirCliente(id) {
   const res = await callGAS('deleteCliente', { id });
   if (res && res.success) {
     showToast('Cliente excluído.', 'info');
+    await refreshData(true);
     renderGestorView();
   }
 }
@@ -3885,6 +3983,7 @@ async function handleSalvarServico(event) {
   if (res && res.success) {
     closeModal('modal-servico');
     showToast('Serviço salvo com sucesso!', 'success');
+    await refreshData(true);
     renderGestorView();
   } else {
     showToast(res ? res.error : 'Erro ao salvar serviço.', 'error');
@@ -3896,6 +3995,7 @@ async function excluirServico(id) {
   const res = await callGAS('deleteServico', { id });
   if (res && res.success) {
     showToast('Serviço excluído.', 'info');
+    await refreshData(true);
     renderGestorView();
   }
 }
@@ -3993,6 +4093,7 @@ async function handleSalvarProduto(event) {
   if (res && res.success) {
     closeModal('modal-produto');
     showToast('Produto salvo com sucesso!', 'success');
+    await refreshData(true);
     renderGestorView();
   } else {
     showToast(res ? res.error : 'Erro ao salvar produto.', 'error');
@@ -4004,6 +4105,7 @@ async function excluirProduto(id) {
   const res = await callGAS('deleteProduto', { id });
   if (res && res.success) {
     showToast('Produto excluído.', 'info');
+    await refreshData(true);
     renderGestorView();
   }
 }
@@ -4223,10 +4325,7 @@ function renderBarberAgenda() {
     lista = lista.filter(a => a.data >= hoje && a.status === 'Agendado');
   }
 
-  lista.sort((a, b) => {
-    if (a.data !== b.data) return (a.data || '').localeCompare(b.data || '');
-    return (a.horario || '').localeCompare(b.horario || '');
-  });
+  lista.sort(compararAgendamentosInteligente);
 
   if (lista.length === 0) {
     container.innerHTML = `
@@ -4303,6 +4402,7 @@ async function barbeiroConcluirAtendimento(agdId, btn) {
 
   if (res && res.success) {
     showToast('Serviço concluído! Comissão registrada no seu saldo.', 'success');
+    await refreshData(true);
     renderBarbeiroView();
   } else {
     showToast(res ? res.error : 'Erro ao atualizar status.', 'error');
@@ -5016,6 +5116,7 @@ async function handleSalvarMasterBarbearia(event) {
   if (res && res.success) {
     closeModal('modal-cadastrar-barbearia');
     showToast(res.message || 'Barbearia cadastrada com sucesso!', 'success');
+    await refreshData(true);
     renderMasterView();
   } else {
     showToast(res ? res.error : 'Erro ao cadastrar barbearia.', 'error');
@@ -5033,6 +5134,7 @@ async function toggleStatusLicencaMasterAction(id, currentStatus) {
   const res = await callGAS('toggleStatusLicencaMaster', { id, status: novoStatus });
   if (res && res.success) {
     showToast(res.message || `Status alterado para ${novoStatus}!`, 'success');
+    await refreshData(true);
     renderMasterView();
   } else {
     showToast(res ? res.error : 'Erro ao alterar status da licença.', 'error');
@@ -5092,6 +5194,7 @@ async function handleSalvarRenovacaoMaster(event) {
   if (res && res.success) {
     closeModal('modal-renovar-assinatura-master');
     showToast(res.message || 'Assinatura renovada com sucesso via PIX!', 'success');
+    await refreshData(true);
     renderMasterView();
   } else {
     showToast(res ? res.error : 'Erro ao renovar assinatura.', 'error');
@@ -5109,6 +5212,7 @@ async function resetSenhaGestorPrompt(id) {
   const res = await callGAS('resetSenhaGestorMaster', { id });
   if (res && res.success) {
     showToast(res.message || 'Senha resetada para "abc123" com sucesso!', 'success');
+    await refreshData(true);
     renderMasterView();
   } else {
     showToast(res ? res.error : 'Erro ao resetar senha.', 'error');
@@ -5126,6 +5230,7 @@ async function excluirBarbeariaPrompt(id) {
   const res = await callGAS('deleteMasterBarbearia', { id });
   if (res && res.success) {
     showToast(res.message || 'Barbearia excluída com sucesso!', 'success');
+    await refreshData(true);
     renderMasterView();
   } else {
     showToast(res ? res.error : 'Erro ao excluir barbearia.', 'error');
