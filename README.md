@@ -16,8 +16,7 @@ O sistema possui uma **tela de login unificada**: ao digitar as credenciais na t
 
 ### 1. Perfil Super Admin (Dono da Plataforma)
 - **Login:** `Rafael_Martins`
-- **Senha Inicial:** `RSNf14232603*`
-- **Painel:** Abre exclusivamente o **PAINEL MASTER SAAS**.
+- - **Painel:** Abre exclusivamente o **PAINEL MASTER SAAS**.
 - **Segurança:** O Super Admin pode alterar sua senha pessoal a qualquer momento no botão **"Minha Senha"** no cabeçalho do painel.
 
 ### 2. Perfis de Gestores de Barbearias
