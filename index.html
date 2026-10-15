@@ -1121,16 +1121,32 @@
               <div>
                 <label class="block text-xs font-semibold text-slate-300 mb-1.5">Foto / Logo da Barbearia</label>
                 <div class="flex items-center gap-4">
-                  <div class="w-16 h-16 rounded-2xl bg-dark-900 border border-dark-700 flex items-center justify-center overflow-hidden shrink-0">
+                  <div class="w-16 h-16 rounded-2xl bg-dark-900 border border-dark-700 flex items-center justify-center overflow-hidden shrink-0 relative">
                     <img id="config-logo-preview" src="" alt="Preview Logo" class="w-full h-full object-cover hidden">
                     <i id="config-logo-preview-icon" data-lucide="image" class="w-6 h-6 text-slate-600"></i>
                   </div>
                   <div class="flex-1 space-y-2">
-                    <input type="url" id="config-logo-url" oninput="updateLogoPreview(this.value)" placeholder="Cole a URL da imagem (https://...)" class="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold-500">
-                    <div class="flex items-center gap-2">
+                    <input type="hidden" id="config-logo-url" value="">
+                    
+                    <!-- Controles quando já existe logo -->
+                    <div id="config-logo-controls-has-image" class="hidden flex items-center gap-2">
                       <label class="cursor-pointer bg-dark-700 hover:bg-dark-600 text-slate-200 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
                         <i data-lucide="upload" class="w-3.5 h-3.5"></i>
-                        <span>Ou selecione arquivo local</span>
+                        <span>Trocar Imagem</span>
+                        <input type="file" id="config-logo-file-trocar" accept="image/*" onchange="handleLogoFileUpload(event)" class="hidden">
+                      </label>
+                      <button type="button" onclick="removerLogoConfig()" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        <span>Remover</span>
+                      </button>
+                    </div>
+
+                    <!-- Controles quando NÃO há logo cadastrado -->
+                    <div id="config-logo-controls-no-image" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <input type="url" id="config-logo-url-input" oninput="handleLogoUrlInput(this.value)" placeholder="Cole a URL da imagem (https://...)" class="flex-1 bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold-500">
+                      <label class="cursor-pointer bg-dark-700 hover:bg-dark-600 text-slate-200 text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                        <span>Carregar Arquivo</span>
                         <input type="file" id="config-logo-file" accept="image/*" onchange="handleLogoFileUpload(event)" class="hidden">
                       </label>
                     </div>

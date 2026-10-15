@@ -72,6 +72,32 @@ let lastSyncTimestamp = 0;
 let comandaProdutosAdicionados = [];
 
 /**
+ * Proteção Universal contra Injeção de Scripts (XSS) e Caracteres Especiais
+ */
+function esc(valor) {
+  if (valor === null || valor === undefined) return '';
+  return String(valor)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/`/g, '&#96;');
+}
+
+/**
+ * Sanitização contra Injeção de Fórmulas no Excel / CSV
+ */
+function sanitizarCsv(valor) {
+  if (valor === null || valor === undefined) return '';
+  let str = String(valor).trim();
+  if (/^[=+\-@]/.test(str)) {
+    str = "'" + str;
+  }
+  return str.replace(/"/g, '""');
+}
+
+/**
  * Normalização Universal de Datas (Formato ISO YYYY-MM-DD local)
  */
 function extrairDataYMD(valor) {
@@ -577,8 +603,8 @@ async function callGAS(action, payload = {}, retryCount = 0) {
     }
 
     setGlobalLoading(false);
-    showToast('Falha na conexão com a planilha do Google. Usando base local.', 'error');
-    return handleLocalAction(action, payload);
+    showToast('Falha ao comunicar com a planilha. Nenhuma alteração foi salva.', 'error');
+    return { success: false, error: 'Falha ao comunicar com a planilha. Nenhuma alteração foi salva.' };
   }
 }
 
@@ -985,9 +1011,21 @@ function handleLocalAction(action, payload) {
     }
 
     case 'deleteBarbeiro': {
-      appState.barbeiros = (appState.barbeiros || []).filter(x => String(x.id) !== String(payload.id));
-      saveLocalData();
-      return { success: true, message: 'Barbeiro excluído com sucesso!' };
+      const temHistorico = (appState.agendamentos || []).some(x => String(x.barbeiro_id) === String(payload.id)) ||
+        (appState.pagamentosBarbeiros || []).some(x => String(x.barbeiro_id) === String(payload.id));
+
+      if (temHistorico) {
+        const b = (appState.barbeiros || []).find(x => String(x.id) === String(payload.id));
+        if (b) {
+          b.ativo = 'NAO';
+        }
+        saveLocalData();
+        return { success: true, message: 'Barbeiro desativado com sucesso (histórico preservado)!' };
+      } else {
+        appState.barbeiros = (appState.barbeiros || []).filter(x => String(x.id) !== String(payload.id));
+        saveLocalData();
+        return { success: true, message: 'Barbeiro excluído com sucesso!' };
+      }
     }
 
     case 'resetSenhaBarbeiro': {
@@ -1059,16 +1097,22 @@ function handleLocalAction(action, payload) {
       const agd = appState.agendamentos.find(x => x.id === payload.id);
       if (agd) {
         agd.status = payload.status;
-        if (payload.forma_pagamento) {
-          agd.forma_pagamento = payload.forma_pagamento;
-        }
-        if (payload.status === 'Concluido') {
-          const total = parseFloat(agd.total_venda) || parseFloat(agd.total_comanda) || parseFloat(agd.servico_preco) || 0;
-          const calc = calcularTaxaECompensacao(total, agd.forma_pagamento, appState.config, agd.data);
-          agd.total_venda = total;
-          agd.taxa_aplicada_valor = calc.taxaAplicadaValor;
-          agd.valor_liquido = calc.valorLiquido;
-          agd.data_compensacao = calc.dataCompensacao;
+        if (payload.status === 'Cancelado') {
+          agd.comissao_valor = 0;
+          agd.taxa_aplicada_valor = 0;
+          agd.valor_liquido = 0;
+        } else {
+          if (payload.forma_pagamento && String(payload.forma_pagamento).toLowerCase() !== 'cancelado') {
+            agd.forma_pagamento = payload.forma_pagamento;
+          }
+          if (payload.status === 'Concluido') {
+            const total = parseFloat(agd.total_venda) || parseFloat(agd.total_comanda) || parseFloat(agd.servico_preco) || 0;
+            const calc = calcularTaxaECompensacao(total, agd.forma_pagamento, appState.config, agd.data);
+            agd.total_venda = total;
+            agd.taxa_aplicada_valor = calc.taxaAplicadaValor;
+            agd.valor_liquido = calc.valorLiquido;
+            agd.data_compensacao = calc.dataCompensacao;
+          }
         }
         saveLocalData();
         return { success: true, message: 'Status atualizado!' };
@@ -1081,7 +1125,7 @@ function handleLocalAction(action, payload) {
       if (!agd) return { success: false, error: 'Agendamento não encontrado.' };
 
       agd.status = 'Concluido';
-      agd.forma_pagamento = payload.forma_pagamento || 'Dinheiro';
+      agd.forma_pagamento = (payload.forma_pagamento && String(payload.forma_pagamento).toLowerCase() !== 'cancelado') ? payload.forma_pagamento : 'Dinheiro';
 
       // Baixa no estoque dos produtos da comanda
       const produtos = payload.produtos_consumidos || [];
@@ -1099,9 +1143,15 @@ function handleLocalAction(action, payload) {
         agd.produtos_comanda = produtos;
         subtotalProdutos = produtos.reduce((acc, p) => acc + (parseFloat(p.preco) * parseInt(p.qtd || p.quantidade || 1)), 0);
       }
-      const totalVenda = (parseFloat(agd.servico_preco) || 0) + subtotalProdutos;
+      const servicoPreco = parseFloat(agd.servico_preco) || 0;
+      const totalVenda = servicoPreco + subtotalProdutos;
       agd.total_comanda = totalVenda;
       agd.total_venda = totalVenda;
+
+      // Recálculo definitivo da comissão incidente EXCLUSIVAMENTE sobre o serviço
+      const barb = (appState.barbeiros || []).find(b => String(b.id) === String(agd.barbeiro_id));
+      const comissaoPct = barb ? (parseFloat(barb.comissao_pct) || 50) : 50;
+      agd.comissao_valor = servicoPreco * (comissaoPct / 100);
 
       // Cálculo financeiro de taxa e compensação bancária
       const calc = calcularTaxaECompensacao(totalVenda, agd.forma_pagamento, appState.config, agd.data);
@@ -1695,28 +1745,104 @@ function updateUIBranding() {
 function updateLogoPreview(url) {
   const previewImg = document.getElementById('config-logo-preview');
   const previewIcon = document.getElementById('config-logo-preview-icon');
-  if (!previewImg || !previewIcon) return;
+  const hiddenInput = document.getElementById('config-logo-url');
+  const hasControls = document.getElementById('config-logo-controls-has-image');
+  const noControls = document.getElementById('config-logo-controls-no-image');
+  const urlInput = document.getElementById('config-logo-url-input');
 
-  if (url && url.trim().length > 5) {
-    previewImg.src = url;
-    previewImg.classList.remove('hidden');
-    previewIcon.classList.add('hidden');
+  const strUrl = url ? String(url).trim() : '';
+  if (hiddenInput) hiddenInput.value = strUrl;
+
+  if (strUrl && strUrl.length > 5) {
+    if (previewImg) {
+      previewImg.src = strUrl;
+      previewImg.classList.remove('hidden');
+    }
+    if (previewIcon) previewIcon.classList.add('hidden');
+    if (hasControls) hasControls.classList.remove('hidden');
+    if (noControls) noControls.classList.add('hidden');
+    if (urlInput && !strUrl.startsWith('data:')) {
+      urlInput.value = strUrl;
+    }
   } else {
-    previewImg.classList.add('hidden');
-    previewIcon.classList.remove('hidden');
+    if (previewImg) {
+      previewImg.src = '';
+      previewImg.classList.add('hidden');
+    }
+    if (previewIcon) previewIcon.classList.remove('hidden');
+    if (hasControls) hasControls.classList.add('hidden');
+    if (noControls) noControls.classList.remove('hidden');
+    if (urlInput) urlInput.value = '';
   }
+  if (window.lucide) lucide.createIcons();
+}
+
+function removerLogoConfig() {
+  updateLogoPreview('');
+  showToast('Logo removido. Clique em Salvar Alterações para confirmar.', 'info');
+}
+
+function handleLogoUrlInput(val) {
+  updateLogoPreview(val);
 }
 
 function handleLogoFileUpload(event) {
-  const file = event.target.files[0];
+  const file = event.target.files && event.target.files[0];
   if (!file) return;
 
   const reader = new FileReader();
   reader.onload = function(e) {
-    const base64 = e.target.result;
-    document.getElementById('config-logo-url').value = base64;
-    updateLogoPreview(base64);
-    showToast('Imagem carregada! Clique em Salvar Alterações para confirmar.', 'info');
+    const img = new Image();
+    img.onload = function() {
+      // 1. Redimensiona para resolução máxima de 256x256 preservando a proporção
+      const maxDim = 256;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxDim) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        }
+      } else {
+        if (height > maxDim) {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // 2. Converte para JPEG com qualidade inicial 0.8
+      let qualidade = 0.8;
+      let base64 = canvas.toDataURL('image/jpeg', qualidade);
+
+      // 3. Se ultrapassar 40.000 caracteres, reduz a qualidade sucessivamente
+      while (base64.length > 40000 && qualidade > 0.2) {
+        qualidade -= 0.1;
+        base64 = canvas.toDataURL('image/jpeg', qualidade);
+      }
+
+      // Se ainda ultrapassar, reduz dimensões
+      if (base64.length > 40000) {
+        canvas.width = Math.round(width * 0.7);
+        canvas.height = Math.round(height * 0.7);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        base64 = canvas.toDataURL('image/jpeg', 0.6);
+      }
+
+      updateLogoPreview(base64);
+      showToast('Imagem otimizada com sucesso (< 40KB)! Clique em Salvar Alterações.', 'success');
+    };
+    img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
@@ -2205,25 +2331,32 @@ function renderAgendaHojeDashboard() {
   let html = '';
   agendamentosHoje.forEach(a => {
     const statusBadge = getStatusBadge(a.status);
+    let acaoHtml = '';
+    if (a.status === 'Agendado') {
+      acaoHtml = `
+        <button onclick="openModalFinalizarAtendimento('${a.id}')" class="bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-dark-900 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all">
+          Finalizar
+        </button>
+      `;
+    } else if (a.status === 'Cancelado') {
+      acaoHtml = `<span class="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded text-[10px] font-bold">Cancelado</span>`;
+    } else {
+      acaoHtml = `<span class="text-[11px] text-slate-500">${esc(formatarFormaPagamento(a.forma_pagamento))}</span>`;
+    }
+
     html += `
       <tr class="hover:bg-dark-900/40 transition-colors">
         <td class="p-3 font-bold text-white">${formatarHora(a.horario)}</td>
         <td class="p-3">
-          <div class="font-medium text-slate-200">${a.cliente_nome}</div>
-          <div class="text-[11px] text-slate-500">${a.cliente_telefone || ''}</div>
+          <div class="font-medium text-slate-200">${esc(a.cliente_nome)}</div>
+          <div class="text-[11px] text-slate-500">${esc(a.cliente_telefone || '')}</div>
         </td>
-        <td class="p-3 text-slate-300">${a.servico_nome}</td>
-        <td class="p-3 text-gold-400 font-medium">${a.barbeiro_nome}</td>
+        <td class="p-3 text-slate-300">${esc(a.servico_nome)}</td>
+        <td class="p-3 text-gold-400 font-medium">${esc(a.barbeiro_nome)}</td>
         <td class="p-3 font-bold text-emerald-400">${formatarMoeda(a.servico_preco)}</td>
         <td class="p-3">${statusBadge}</td>
         <td class="p-3 text-right">
-          ${a.status === 'Agendado' ? `
-            <button onclick="openModalFinalizarAtendimento('${a.id}')" class="bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-dark-900 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all">
-              Finalizar
-            </button>
-          ` : `
-            <span class="text-[11px] text-slate-500">${formatarFormaPagamento(a.forma_pagamento)}</span>
-          `}
+          ${acaoHtml}
         </td>
       </tr>
     `;
@@ -2378,6 +2511,25 @@ function renderAgendamentos() {
     const preco = parseFloat(a.servico_preco) || 0;
     const comissao = a.comissao_valor ? parseFloat(a.comissao_valor) : (preco * 0.5);
 
+    // Na tabela de agendamentos, para itens cancelados ou pendentes, exiba "—" na coluna de pagamento e o badge 'Cancelado' na coluna de ações
+    const formaExibida = (a.status === 'Cancelado' || a.status === 'Agendado') ? '—' : esc(formatarFormaPagamento(a.forma_pagamento));
+
+    let acaoHtml = '';
+    if (a.status === 'Agendado') {
+      acaoHtml = `
+        <button onclick="openModalFinalizarAtendimento('${a.id}')" title="Concluir Atendimento e Receber Comanda" class="bg-emerald-500 hover:bg-emerald-400 text-dark-900 font-bold px-2.5 py-1 rounded-lg text-xs transition-all shadow-sm">
+          Finalizar
+        </button>
+        <button onclick="cancelarAgendamento('${a.id}')" title="Cancelar Agendamento" class="text-rose-400 hover:bg-rose-500/10 p-1 rounded-lg transition-colors">
+          <i data-lucide="x-circle" class="w-4 h-4"></i>
+        </button>
+      `;
+    } else if (a.status === 'Cancelado') {
+      acaoHtml = `<span class="bg-rose-500/10 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded text-[10px] font-bold">Cancelado</span>`;
+    } else {
+      acaoHtml = `<span class="text-[11px] text-slate-500">Concluído</span>`;
+    }
+
     html += `
       <tr class="hover:bg-dark-900/40 transition-colors">
         <td class="p-3">
@@ -2386,31 +2538,22 @@ function renderAgendamentos() {
         </td>
         <td class="p-3">
           <div class="font-medium text-slate-200 flex items-center gap-1.5">
-            <span>${a.cliente_nome}</span>
+            <span>${esc(a.cliente_nome)}</span>
             <button type="button" onclick="abrirWhatsAppConfirmacao('${a.id}')" title="Enviar Confirmação de Horário no WhatsApp" class="text-emerald-400 hover:text-emerald-300 p-0.5 hover:bg-emerald-500/10 rounded transition-colors inline-flex items-center">
               <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
             </button>
           </div>
-          <div class="text-[11px] text-slate-500">${a.cliente_telefone || ''}</div>
+          <div class="text-[11px] text-slate-500">${esc(a.cliente_telefone || '')}</div>
         </td>
-        <td class="p-3 text-slate-300 font-medium">${a.servico_nome}</td>
-        <td class="p-3 text-gold-400 font-medium">${a.barbeiro_nome}</td>
+        <td class="p-3 text-slate-300 font-medium">${esc(a.servico_nome)}</td>
+        <td class="p-3 text-gold-400 font-medium">${esc(a.barbeiro_nome)}</td>
         <td class="p-3 font-bold text-emerald-400">${formatarMoeda(preco)}</td>
         <td class="p-3 text-amber-300 font-semibold">${formatarMoeda(comissao)}</td>
-        <td class="p-3 text-slate-300 font-medium">${formatarFormaPagamento(a.forma_pagamento)}</td>
+        <td class="p-3 text-slate-300 font-medium">${formaExibida}</td>
         <td class="p-3">${statusBadge}</td>
         <td class="p-3 text-right">
           <div class="flex items-center justify-end gap-1.5">
-            ${a.status === 'Agendado' ? `
-              <button onclick="openModalFinalizarAtendimento('${a.id}')" title="Concluir Atendimento e Receber Comanda" class="bg-emerald-500 hover:bg-emerald-400 text-dark-900 font-bold px-2.5 py-1 rounded-lg text-xs transition-all shadow-sm">
-                Finalizar
-              </button>
-              <button onclick="cancelarAgendamento('${a.id}')" title="Cancelar Agendamento" class="text-rose-400 hover:bg-rose-500/10 p-1 rounded-lg transition-colors">
-                <i data-lucide="x-circle" class="w-4 h-4"></i>
-              </button>
-            ` : `
-              <span class="text-[11px] text-slate-500">Concluído</span>
-            `}
+            ${acaoHtml}
           </div>
         </td>
       </tr>
@@ -2448,7 +2591,7 @@ function openModalNovoAgendamento() {
 
   const barbSelect = document.getElementById('agendamento-barbeiro-select');
   barbSelect.innerHTML = '<option value="">Selecione o barbeiro...</option>';
-  (appState.barbeiros || []).forEach(b => {
+  (appState.barbeiros || []).filter(b => b.ativo !== 'NAO' && b.ativo !== false).forEach(b => {
     const opt = document.createElement('option');
     opt.value = b.id;
     opt.textContent = `${b.nome} (Comissão: ${b.comissao_pct || 50}%)`;
@@ -2759,12 +2902,11 @@ async function cancelarAgendamento(agendamentoId) {
 
   const res = await callGAS('updateAgendamentoStatus', {
     id: agendamentoId,
-    status: 'Cancelado',
-    forma_pagamento: 'Cancelado'
+    status: 'Cancelado'
   });
 
   if (res && res.success) {
-    showToast('Agendamento cancelado!', 'info');
+    showToast('Agendamento cancelado com sucesso!', 'info');
     await refreshData(true);
     renderGestorView();
   } else {
@@ -2785,8 +2927,7 @@ async function handleCancelarAgendamentoModal(agendamentoId) {
 
   const res = await callGAS('updateAgendamentoStatus', {
     id: agdId,
-    status: 'Cancelado',
-    forma_pagamento: 'Cancelado'
+    status: 'Cancelado'
   });
 
   if (res && res.success) {
@@ -3545,7 +3686,7 @@ function exportarFechamentoCSV(dataIso) {
   // Montagem do arquivo CSV formatado em ponto-e-vírgula com UTF-8 BOM
   let csv = '\uFEFF';
   csv += `RELATÓRIO DE FECHAMENTO DE CAIXA & MAQUININHA DIÁRIO\n`;
-  csv += `Barbearia;${nomeBarbearia}\n`;
+  csv += `Barbearia;${sanitizarCsv(nomeBarbearia)}\n`;
   csv += `Data de Referência;${formatarDataPt(dataIso)}\n`;
   csv += `Gerado em;${getHojeAgoraString()}\n\n`;
 
@@ -3585,7 +3726,7 @@ function exportarFechamentoCSV(dataIso) {
       dtComp = calc.dataCompensacao;
     }
     const com = parseFloat(a.comissao_valor) || 0;
-    csv += `"${formatarHora(a.horario)}";"${a.cliente_nome}";"${a.cliente_telefone || ''}";"${a.servico_nome}";"${a.barbeiro_nome}";"${formatarFormaPagamento(a.forma_pagamento)}";${bruto.toFixed(2)};${taxa.toFixed(2)};${liq.toFixed(2)};"${formatarDataPt(dtComp)}";${com.toFixed(2)}\n`;
+    csv += `"${sanitizarCsv(formatarHora(a.horario))}";"${sanitizarCsv(a.cliente_nome)}";"${sanitizarCsv(a.cliente_telefone || '')}";"${sanitizarCsv(a.servico_nome)}";"${sanitizarCsv(a.barbeiro_nome)}";"${sanitizarCsv(formatarFormaPagamento(a.forma_pagamento))}";${bruto.toFixed(2)};${taxa.toFixed(2)};${liq.toFixed(2)};"${sanitizarCsv(formatarDataPt(dtComp))}";${com.toFixed(2)}\n`;
   });
   csv += `\n`;
 
@@ -3594,7 +3735,7 @@ function exportarFechamentoCSV(dataIso) {
   sangriasDia.forEach(s => {
     const hora = s.data_hora ? s.data_hora.substring(11, 16) : '--:--';
     const val = parseFloat(s.valor) || 0;
-    csv += `"${hora}";"${s.motivo || 'Sangria'}";"${s.usuario || 'Gestor'}";-${val.toFixed(2)}\n`;
+    csv += `"${sanitizarCsv(hora)}";"${sanitizarCsv(s.motivo || 'Sangria')}";"${sanitizarCsv(s.usuario || 'Gestor')}";-${val.toFixed(2)}\n`;
   });
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -3634,19 +3775,23 @@ function renderBarbeiros() {
     const appUrlBarbeiro = gasUrl ? `https://saas-gestao-barbearia.vercel.app/?api=${encodeURIComponent(gasUrl)}` : 'https://saas-gestao-barbearia.vercel.app/';
     const msgBarbeiro = `Olá ${b.nome}! Acesse seu aplicativo de barbeiro pelo link: ${appUrlBarbeiro}\nSeu login: ${b.login}\nSenha inicial: abc123`;
     const zapLink = b.telefone ? `https://wa.me/55${limparTelefone(b.telefone)}?text=${encodeURIComponent(msgBarbeiro)}` : null;
+    const isAtivo = b.ativo !== 'NAO' && b.ativo !== false;
 
     html += `
-      <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5 shadow-sm flex flex-col justify-between hover:border-gold-500/40 transition-all">
+      <div class="bg-dark-800 border border-dark-700/80 rounded-2xl p-5 shadow-sm flex flex-col justify-between hover:border-gold-500/40 transition-all ${!isAtivo ? 'opacity-70' : ''}">
         <div>
           <div class="flex items-start justify-between gap-2 mb-3">
             <div class="flex items-center gap-3">
               <div class="w-12 h-12 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400 font-bold text-base">
-                ${b.nome.substring(0, 2).toUpperCase()}
+                ${esc(b.nome.substring(0, 2).toUpperCase())}
               </div>
               <div>
-                <h3 class="text-sm font-bold text-white">${b.nome}</h3>
+                <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>${esc(b.nome)}</span>
+                  ${!isAtivo ? '<span class="text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/30 px-1.5 py-0.5 rounded font-bold">Inativo</span>' : ''}
+                </h3>
                 <div class="flex items-center gap-2 mt-0.5">
-                  <span class="text-[11px] font-mono text-gold-400 bg-gold-500/10 px-1.5 py-0.5 rounded">Login: ${b.login}</span>
+                  <span class="text-[11px] font-mono text-gold-400 bg-gold-500/10 px-1.5 py-0.5 rounded">Login: ${esc(b.login)}</span>
                 </div>
               </div>
             </div>
@@ -3655,7 +3800,7 @@ function renderBarbeiros() {
               <button onclick="editarBarbeiro('${b.id}')" title="Editar Barbeiro" class="text-slate-400 hover:text-gold-400 p-1.5 rounded-lg hover:bg-dark-700 transition-colors">
                 <i data-lucide="edit-3" class="w-4 h-4"></i>
               </button>
-              <button onclick="resetarSenhaBarbeiroPrompt('${b.id}', '${b.nome}')" title="Resetar Senha do Barbeiro" class="text-slate-400 hover:text-amber-400 p-1.5 rounded-lg hover:bg-dark-700 transition-colors">
+              <button onclick="resetarSenhaBarbeiroPrompt('${b.id}')" title="Resetar Senha do Barbeiro" class="text-slate-400 hover:text-amber-400 p-1.5 rounded-lg hover:bg-dark-700 transition-colors">
                 <i data-lucide="key" class="w-4 h-4"></i>
               </button>
               <button onclick="excluirBarbeiro('${b.id}')" title="Excluir Barbeiro" class="text-slate-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-dark-700 transition-colors">
@@ -3698,7 +3843,7 @@ function renderBarbeiros() {
               <i data-lucide="message-circle" class="w-4 h-4"></i>
             </a>
           ` : ''}
-          <button onclick="openModalPagarBarbeiro('${b.id}', '${b.nome}', ${sal.saldoAReceber})" class="flex-1 bg-gold-500 hover:bg-gold-400 text-dark-900 font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-gold-500/10 transition-all">
+          <button onclick="openModalPagarBarbeiro('${b.id}')" class="flex-1 bg-gold-500 hover:bg-gold-400 text-dark-900 font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-gold-500/10 transition-all">
             <i data-lucide="dollar-sign" class="w-4 h-4"></i>
             <span>Pagar Barbeiro</span>
           </button>
@@ -3746,7 +3891,12 @@ function renderTabelaPagamentosBarbeiros() {
   tbody.innerHTML = html;
 }
 
-function openModalPagarBarbeiro(barbeiroId, nome, saldoAtual) {
+function openModalPagarBarbeiro(barbeiroId) {
+  const b = (appState.barbeiros || []).find(x => String(x.id) === String(barbeiroId));
+  const nome = b ? b.nome : '';
+  const sal = calcularSaldoBarbeiro(barbeiroId);
+  const saldoAtual = sal.saldoAReceber;
+
   document.getElementById('pagamento-barbeiro-id').value = barbeiroId;
   document.getElementById('pagamento-barbeiro-nome').value = nome;
   document.getElementById('pagamento-saldo-atual').textContent = formatarMoeda(saldoAtual);
@@ -3905,7 +4055,10 @@ async function handleSalvarBarbeiro(event) {
   }
 }
 
-async function resetarSenhaBarbeiroPrompt(id, nome) {
+async function resetarSenhaBarbeiroPrompt(id) {
+  const b = (appState.barbeiros || []).find(x => String(x.id) === String(id));
+  const nome = b ? b.nome : 'o profissional';
+
   if (!confirm(`Deseja resetar a senha de ${nome}? A senha voltará obrigatoriamente para o padrão temporário "abc123", e o profissional precisará cadastrar uma nova senha segura no próximo acesso.`)) {
     return;
   }
@@ -3941,11 +4094,11 @@ function renderClientes() {
     const zapLink = c.telefone ? `https://wa.me/55${limparTelefone(c.telefone)}` : null;
     html += `
       <tr class="hover:bg-dark-900/40 transition-colors">
-        <td class="p-3 text-slate-500 font-mono text-[11px]">${c.id}</td>
-        <td class="p-3 font-bold text-white">${c.nome}</td>
+        <td class="p-3 text-slate-500 font-mono text-[11px]">${esc(c.id)}</td>
+        <td class="p-3 font-bold text-white">${esc(c.nome)}</td>
         <td class="p-3">
           <div class="flex items-center gap-2 text-slate-300">
-            <span>${c.telefone || '-'}</span>
+            <span>${esc(c.telefone || '-')}</span>
             ${zapLink ? `<a href="${zapLink}" target="_blank" class="text-emerald-400 hover:text-emerald-300"><i data-lucide="message-circle" class="w-4 h-4 inline"></i></a>` : ''}
           </div>
         </td>
@@ -4025,8 +4178,8 @@ function renderServicos() {
   lista.forEach(s => {
     html += `
       <tr class="hover:bg-dark-900/40 transition-colors">
-        <td class="p-3 text-slate-500 font-mono text-[11px]">${s.id}</td>
-        <td class="p-3 font-bold text-white">${s.nome}</td>
+        <td class="p-3 text-slate-500 font-mono text-[11px]">${esc(s.id)}</td>
+        <td class="p-3 font-bold text-white">${esc(s.nome)}</td>
         <td class="p-3 font-bold text-emerald-400">${formatarMoeda(s.preco)}</td>
         <td class="p-3 text-slate-300">${s.duracao_min || 30} minutos</td>
         <td class="p-3 text-right">
@@ -4131,9 +4284,9 @@ function renderProdutos() {
 
     html += `
       <tr class="hover:bg-dark-900/40 transition-colors ${isCritico ? 'bg-rose-500/5' : ''}">
-        <td class="p-3 text-slate-500 font-mono text-[11px]">${p.id}</td>
+        <td class="p-3 text-slate-500 font-mono text-[11px]">${esc(p.id)}</td>
         <td class="p-3 font-bold text-white flex items-center gap-2">
-          <span>${p.nome}</span>
+          <span>${esc(p.nome)}</span>
           ${isCritico ? '<i data-lucide="alert-circle" class="w-4 h-4 text-rose-400"></i>' : ''}
         </td>
         <td class="p-3 font-bold text-emerald-400">${formatarMoeda(p.preco)}</td>
@@ -4451,8 +4604,8 @@ function renderBarberAgenda() {
 
         <div class="flex items-center justify-between border-y border-dark-700/50 py-2.5">
           <div>
-            <h4 class="text-sm font-bold text-white">${a.cliente_nome}</h4>
-            <p class="text-xs text-gold-400 font-medium">${a.servico_nome}</p>
+            <h4 class="text-sm font-bold text-white">${esc(a.cliente_nome)}</h4>
+            <p class="text-xs text-gold-400 font-medium">${esc(a.servico_nome)}</p>
           </div>
           ${zapLink ? `
             <a href="${zapLink}" target="_blank" class="p-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-xl" title="Conversar no WhatsApp">
@@ -4469,7 +4622,7 @@ function renderBarberAgenda() {
         </div>
 
         ${a.status === 'Agendado' ? `
-          <button onclick="barbeiroConcluirAtendimento('${a.id}', this)" class="w-full bg-emerald-500 hover:bg-emerald-400 text-dark-900 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/10">
+          <button onclick="barbeiroConcluirAtendimento('${esc(a.id)}', this)" class="w-full bg-emerald-500 hover:bg-emerald-400 text-dark-900 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/10">
             <i data-lucide="check" class="w-4 h-4"></i>
             <span>Marcar como Concluído</span>
           </button>
@@ -4551,7 +4704,7 @@ function renderBarberExtrato(sal) {
           </div>
           <div class="flex items-center justify-between text-xs pt-1.5 border-t border-dark-800 text-slate-300">
             <span class="text-[11px] text-slate-400">Observação:</span>
-            <span class="font-medium text-white">${p.observacao || 'Acerto de comissão'}</span>
+            <span class="font-medium text-white">${esc(p.observacao || 'Acerto de comissão')}</span>
           </div>
         </div>
       `;
@@ -4581,8 +4734,8 @@ function renderBarberExtrato(sal) {
       html += `
         <div class="p-2.5 bg-dark-900 rounded-xl border border-dark-700/80 flex items-center justify-between text-xs hover:border-dark-600 transition-colors">
           <div>
-            <div class="font-medium text-white">${a.servico_nome}</div>
-            <div class="text-[11px] text-slate-400">${a.cliente_nome} (${formatarDataPt(a.data)} às ${formatarHora(a.horario)})</div>
+            <div class="font-medium text-white">${esc(a.servico_nome)}</div>
+            <div class="text-[11px] text-slate-400">${esc(a.cliente_nome)} (${formatarDataPt(a.data)} às ${formatarHora(a.horario)})</div>
           </div>
           <div class="text-right">
             <span class="text-gold-400 font-bold">+ ${formatarMoeda(comissao)}</span>
@@ -5079,13 +5232,13 @@ async function renderMasterView() {
     html += `
       <tr class="hover:bg-dark-800/60 transition-colors">
         <td class="p-3.5">
-          <div class="font-bold text-white text-sm">${b.nome_barbearia}</div>
-          <div class="text-[11px] text-slate-400">${b.responsavel || 'Responsável não informado'}</div>
+          <div class="font-bold text-white text-sm">${esc(b.nome_barbearia)}</div>
+          <div class="text-[11px] text-slate-400">${esc(b.responsavel || 'Responsável não informado')}</div>
         </td>
 
         <td class="p-3.5 font-mono">
           <div class="text-gold-400 font-bold bg-dark-900/80 px-2 py-1 rounded-lg border border-dark-700 inline-block text-[11px]">
-            ${b.login_gestor}
+            ${esc(b.login_gestor)}
           </div>
           <div class="text-[10px] text-slate-500 mt-0.5">
             ${b.senha_gestor === 'abc123' ? '<span class="text-amber-400 font-medium">Senha inicial (abc123)</span>' : '<span class="text-emerald-400">Senha pessoal ativa</span>'}
@@ -5093,7 +5246,7 @@ async function renderMasterView() {
         </td>
 
         <td class="p-3.5">
-          <div class="text-slate-300">${b.telefone || '--'}</div>
+          <div class="text-slate-300">${esc(b.telefone || '--')}</div>
           ${zapLimpo ? `
             <a href="${zapLink}" target="_blank" class="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-medium mt-0.5">
               <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
@@ -5103,7 +5256,7 @@ async function renderMasterView() {
         </td>
 
         <td class="p-3.5">
-          <div class="font-bold text-slate-200">${b.plano || 'Mensal'}</div>
+          <div class="font-bold text-slate-200">${esc(b.plano || 'Mensal')}</div>
           <div class="text-[11px] text-gold-400 font-semibold">${formatarMoeda(b.valor_pago || 0)} <span class="text-[10px] text-slate-500">(PIX)</span></div>
         </td>
 
@@ -5134,27 +5287,27 @@ async function renderMasterView() {
         <td class="p-3.5 text-right">
           <div class="flex items-center justify-end gap-1.5">
             <!-- Travar/Destravar -->
-            <button onclick="toggleStatusLicencaMasterAction('${b.id}', '${b.status_licenca}')" title="${isBloqueada ? 'Destravar Barbearia' : 'Travar Acesso da Barbearia'}" class="p-2 rounded-xl text-xs font-semibold ${isBloqueada ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30' : 'bg-dark-900 text-slate-400 hover:text-white border border-dark-700'} transition-all">
+            <button onclick="toggleStatusLicencaMasterAction('${esc(b.id)}', '${esc(b.status_licenca)}')" title="${isBloqueada ? 'Destravar Barbearia' : 'Travar Acesso da Barbearia'}" class="p-2 rounded-xl text-xs font-semibold ${isBloqueada ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30' : 'bg-dark-900 text-slate-400 hover:text-white border border-dark-700'} transition-all">
               <i data-lucide="${isBloqueada ? 'unlock' : 'lock'}" class="w-4 h-4"></i>
             </button>
 
             <!-- Renovar Assinatura PIX -->
-            <button onclick="openModalRenovarAssinaturaMaster('${b.id}')" title="Registrar Pagamento PIX e Renovar Vencimento" class="p-2 bg-gold-500/10 text-gold-400 hover:bg-gold-500/20 border border-gold-500/30 rounded-xl transition-all">
+            <button onclick="openModalRenovarAssinaturaMaster('${esc(b.id)}')" title="Registrar Pagamento PIX e Renovar Vencimento" class="p-2 bg-gold-500/10 text-gold-400 hover:bg-gold-500/20 border border-gold-500/30 rounded-xl transition-all">
               <i data-lucide="refresh-cw" class="w-4 h-4"></i>
             </button>
 
             <!-- Auditar / Entrar no Painel -->
-            <button onclick="auditarBarbearia('${b.id}')" title="Auditar / Visualizar Painel Desta Barbearia" class="p-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl transition-all">
+            <button onclick="auditarBarbearia('${esc(b.id)}')" title="Auditar / Visualizar Painel Desta Barbearia" class="p-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl transition-all">
               <i data-lucide="eye" class="w-4 h-4"></i>
             </button>
 
             <!-- Resetar Senha Gestor -->
-            <button onclick="resetSenhaGestorPrompt('${b.id}')" title="Resetar Senha do Gestor para 'abc123'" class="p-2 bg-dark-900 text-slate-400 hover:text-amber-400 border border-dark-700 rounded-xl transition-all">
+            <button onclick="resetSenhaGestorPrompt('${esc(b.id)}')" title="Resetar Senha do Gestor para 'abc123'" class="p-2 bg-dark-900 text-slate-400 hover:text-amber-400 border border-dark-700 rounded-xl transition-all">
               <i data-lucide="key" class="w-4 h-4"></i>
             </button>
 
             <!-- Excluir Barbearia -->
-            <button onclick="excluirBarbeariaPrompt('${b.id}')" title="Excluir Barbearia" class="p-2 bg-dark-900 text-slate-500 hover:text-rose-400 border border-dark-700 rounded-xl transition-all">
+            <button onclick="excluirBarbeariaPrompt('${esc(b.id)}')" title="Excluir Barbearia" class="p-2 bg-dark-900 text-slate-500 hover:text-rose-400 border border-dark-700 rounded-xl transition-all">
               <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
           </div>
@@ -5445,7 +5598,7 @@ function exportarRelatorioMasterCSV() {
     const situacao = b.status_licenca === 'BLOQUEADA' ? 'BLOQUEADA' : (isVencida ? 'VENCIDA' : 'EM DIA');
     const valor = (parseFloat(b.valor_pago) || 0).toFixed(2).replace('.', ',');
 
-    csv += `"${b.id}";"${b.nome_barbearia}";"${b.responsavel || ''}";"${b.telefone || ''}";"${b.login_gestor}";"${b.plano || 'Mensal'}";"${valor}";"PIX";"${b.data_vencimento || ''}";"${b.status_licenca}";"${situacao}"\n`;
+    csv += `"${sanitizarCsv(b.id)}";"${sanitizarCsv(b.nome_barbearia)}";"${sanitizarCsv(b.responsavel || '')}";"${sanitizarCsv(b.telefone || '')}";"${sanitizarCsv(b.login_gestor)}";"${sanitizarCsv(b.plano || 'Mensal')}";"${sanitizarCsv(valor)}";"PIX";"${sanitizarCsv(b.data_vencimento || '')}";"${sanitizarCsv(b.status_licenca)}";"${sanitizarCsv(situacao)}"\n`;
   });
 
   const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
@@ -5490,11 +5643,11 @@ function openModalRelatorioMaster() {
 
     linhas += `
       <tr class="border-b border-dark-700/60">
-        <td class="p-2.5 font-bold text-white">${idx + 1}. ${b.nome_barbearia}</td>
-        <td class="p-2.5 text-slate-300">${b.responsavel || '--'}</td>
-        <td class="p-2.5 font-mono text-gold-400">${b.login_gestor}</td>
-        <td class="p-2.5 text-slate-300">${b.telefone || '--'}</td>
-        <td class="p-2.5 text-slate-300">${b.plano || 'Mensal'}</td>
+        <td class="p-2.5 font-bold text-white">${idx + 1}. ${esc(b.nome_barbearia)}</td>
+        <td class="p-2.5 text-slate-300">${esc(b.responsavel || '--')}</td>
+        <td class="p-2.5 font-mono text-gold-400">${esc(b.login_gestor)}</td>
+        <td class="p-2.5 text-slate-300">${esc(b.telefone || '--')}</td>
+        <td class="p-2.5 text-slate-300">${esc(b.plano || 'Mensal')}</td>
         <td class="p-2.5 font-bold text-gold-400">${formatarMoeda(b.valor_pago || 0)}</td>
         <td class="p-2.5 font-medium">${formatarDataPt(b.data_vencimento)}</td>
         <td class="p-2.5 font-bold ${statusColor}">${statusText}</td>

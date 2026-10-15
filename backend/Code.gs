@@ -1288,7 +1288,64 @@ function saveBarbeiro(barb) {
 }
 
 function deleteBarbeiro(id) {
-  return deleteRowById(SHEETS.BARBEIROS, id);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEETS.BARBEIROS);
+  if (!sheet) return { success: false, error: 'Aba Barbeiros não encontrada.' };
+
+  var data = sheet.getDataRange().getValues();
+  var barbRow = -1;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      barbRow = i + 1;
+      break;
+    }
+  }
+  if (barbRow === -1) {
+    return { success: false, error: 'Barbeiro não encontrado.' };
+  }
+
+  // Verifica se o barbeiro possui histórico em Agendamentos ou Pagamentos
+  var temHistorico = false;
+  var sAg = ss.getSheetByName(SHEETS.AGENDAMENTOS);
+  if (sAg) {
+    var agData = sAg.getDataRange().getValues();
+    for (var a = 1; a < agData.length; a++) {
+      if (String(agData[a][6]) === String(id)) { // coluna 6: barbeiro_id
+        temHistorico = true;
+        break;
+      }
+    }
+  }
+
+  if (!temHistorico) {
+    var sPag = ss.getSheetByName(SHEETS.PAGAMENTOS);
+    if (sPag) {
+      var pagData = sPag.getDataRange().getValues();
+      for (var p = 1; p < pagData.length; p++) {
+        if (String(pagData[p][1]) === String(id)) { // coluna 1: barbeiro_id
+          temHistorico = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if (temHistorico) {
+    // Soft delete: atualiza coluna 'ativo' (coluna 7) para 'NAO'
+    sheet.getRange(barbRow, 7).setValue('NAO');
+    return {
+      success: true,
+      message: 'Barbeiro desativado com sucesso (histórico preservado)!',
+      softDelete: true
+    };
+  } else {
+    // Hard delete: remove a linha
+    sheet.deleteRow(barbRow);
+    return {
+      success: true,
+      message: 'Barbeiro excluído com sucesso!'
+    };
+  }
 }
 
 /**
@@ -1498,17 +1555,25 @@ function updateAgendamentoStatus(id, status, formaPagamento) {
     if (String(data[i][0]) === String(id)) {
       var row = data[i];
       row[10] = status;
-      if (formaPagamento) {
-        row[11] = formaPagamento;
-      }
 
-      if (status === 'Concluido') {
-        var totalVenda = parseFloat(row[15]) || parseFloat(row[5]) || 0;
-        var dataTransacao = String(row[8]) || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-        var taxaInfo = calcularTaxaECompensacaoBackend(totalVenda, row[11], cfg, dataTransacao);
-        row[16] = taxaInfo.taxaValor;
-        row[17] = taxaInfo.valorLiquido;
-        row[18] = taxaInfo.dataCompensacao;
+      if (status === 'Cancelado') {
+        // Ao cancelar um agendamento, mantenha forma_pagamento inalterado (ou com valor original)
+        // e zere comissao_valor, taxa_aplicada_valor e valor_liquido (R$ 0,00)
+        row[12] = 0.00;
+        row[16] = 0.00;
+        row[17] = 0.00;
+      } else {
+        if (formaPagamento && String(formaPagamento).toLowerCase() !== 'cancelado') {
+          row[11] = formaPagamento;
+        }
+        if (status === 'Concluido') {
+          var totalVenda = parseFloat(row[15]) || parseFloat(row[5]) || 0;
+          var dataTransacao = String(row[8]) || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+          var taxaInfo = calcularTaxaECompensacaoBackend(totalVenda, row[11], cfg, dataTransacao);
+          row[16] = taxaInfo.taxaValor;
+          row[17] = taxaInfo.valorLiquido;
+          row[18] = taxaInfo.dataCompensacao;
+        }
       }
 
       sheet.getRange(i + 1, 1, 1, Math.max(row.length, 19)).setValues([row]);
@@ -1538,7 +1603,7 @@ function finalizarAtendimentoComanda(agdId, formaPagamento, produtosConsumidos) 
     return { success: false, error: 'Agendamento não encontrado.' };
   }
 
-  var formaFinal = formaPagamento || 'Dinheiro';
+  var formaFinal = (formaPagamento && String(formaPagamento).toLowerCase() !== 'cancelado') ? formaPagamento : 'Dinheiro';
 
   // 1. Atualiza status e forma de pagamento
   sAg.getRange(agRow, 11).setValue('Concluido');
@@ -1578,8 +1643,24 @@ function finalizarAtendimentoComanda(agdId, formaPagamento, produtosConsumidos) 
   }
 
   var servicoPreco = parseFloat(agData[agRow - 1][5]) || 0;
+  var barbeiroId = agData[agRow - 1][6];
   var totalVenda = servicoPreco + totalProdutos;
   var dataTransacao = String(agData[agRow - 1][8]) || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  // Recálculo definitivo da comissão incidente EXCLUSIVAMENTE sobre o valor do serviço
+  var comissaoPct = 50;
+  var sBarb = ss.getSheetByName(SHEETS.BARBEIROS);
+  if (sBarb) {
+    var bData = sBarb.getDataRange().getValues();
+    for (var b = 1; b < bData.length; b++) {
+      if (String(bData[b][0]) === String(barbeiroId)) {
+        comissaoPct = parseFloat(bData[b][5]) || 50;
+        break;
+      }
+    }
+  }
+  var comissaoValor = servicoPreco * (comissaoPct / 100);
+  sAg.getRange(agRow, 13).setValue(comissaoValor);
 
   // 3. Aplica Taxa Bancária e Prazo de Compensação
   var cfg = getTaxasConfig(ss);
@@ -1596,6 +1677,7 @@ function finalizarAtendimentoComanda(agdId, formaPagamento, produtosConsumidos) 
     success: true,
     message: 'Comanda finalizada com sucesso! Estoque, taxas da maquininha e caixa atualizados.',
     totalVenda: totalVenda,
+    comissaoValor: comissaoValor,
     taxaAplicada: taxaInfo.taxaValor,
     valorLiquido: taxaInfo.valorLiquido,
     dataCompensacao: taxaInfo.dataCompensacao,
