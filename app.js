@@ -72,13 +72,47 @@ let lastSyncTimestamp = 0;
 let comandaProdutosAdicionados = [];
 
 /**
+ * Normalização Universal de Datas (Formato ISO YYYY-MM-DD local)
+ */
+function extrairDataYMD(valor) {
+  if (!valor) return '';
+  const str = String(valor).trim().split('T')[0].split(' ')[0];
+  if (str.includes('/')) {
+    const p = str.split('/');
+    if (p.length === 3) {
+      if (p[0].length === 4) return `${p[0]}-${p[1].padStart(2, '0')}-${p[2].padStart(2, '0')}`;
+      return `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+    }
+  }
+  return str;
+}
+
+function obterDataHojeLocalYMD() {
+  const d = new Date();
+  const ano = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+}
+
+function getValorBrutoAgendamento(a) {
+  if (!a) return 0;
+  const tot = parseFloat(a.total_venda) || parseFloat(a.total_comanda);
+  if (tot && !isNaN(tot)) return tot;
+  const srv = parseFloat(a.servico_preco) || parseFloat(a.valor) || 0;
+  const prod = parseFloat(a.valor_produtos) || 0;
+  return srv + prod;
+}
+
+/**
  * Utilitário Financeiro: Calcula a data de compensação bancária considerando dias úteis
  * Pula Sábados e Domingos
  */
 function calcularDataCompensacao(dataStr, diasUteis) {
-  if (!diasUteis || diasUteis <= 0) return dataStr || getHojeString();
-  const partes = String(dataStr).split('-');
-  if (partes.length < 3) return dataStr || getHojeString();
+  const limpo = extrairDataYMD(dataStr) || obterDataHojeLocalYMD();
+  if (!diasUteis || diasUteis <= 0) return limpo;
+  const partes = limpo.split('-');
+  if (partes.length < 3) return limpo;
   const ano = parseInt(partes[0], 10);
   const mes = parseInt(partes[1], 10) - 1;
   const dia = parseInt(partes[2], 10);
@@ -975,9 +1009,9 @@ function handleLocalAction(action, payload) {
       // Prevenção de conflito de horário para o mesmo barbeiro
       const conflito = (appState.agendamentos || []).some(a =>
         String(a.barbeiro_id) === String(agd.barbeiro_id) &&
-        a.data === agd.data &&
-        a.horario === agd.horario &&
-        a.status === 'Agendado' &&
+        extrairDataYMD(a.data) === extrairDataYMD(agd.data) &&
+        formatarHora(a.horario) === formatarHora(agd.horario) &&
+        (a.status === 'Agendado' || a.status === 'agendado') &&
         a.id !== agd.id
       );
 
@@ -1762,20 +1796,45 @@ function toggleMobileMenu() {
 // 9.1 DASHBOARD GERAL & CÁLCULOS FINANCEIROS
 // -------------------------------------------------------------------------
 function renderDashboard() {
-  const hoje = getHojeString();
-  const hojePt = formatarDataPt(hoje);
-  document.getElementById('dash-data-hoje').textContent = hojePt;
+  const hojeYMD = obterDataHojeLocalYMD();
+  const hojePt = formatarDataPt(hojeYMD);
+  const elDataHoje = document.getElementById('dash-data-hoje');
+  if (elDataHoje) elDataHoje.textContent = hojePt;
+
+  // 1. Filtra agendamentos concluídos de hoje com normalização universal
+  const concluidosHoje = (appState.agendamentos || []).filter(a => {
+    const status = String(a.status || '').trim().toLowerCase();
+    return status === 'concluido' && extrairDataYMD(a.data) === hojeYMD;
+  });
+
+  // 2. Faturamento e atendimentos de hoje
+  const faturamentoHoje = concluidosHoje.reduce((acc, a) => acc + getValorBrutoAgendamento(a), 0);
+  const cortesHoje = concluidosHoje.length;
+
+  // 3. Recebimentos por forma (Dinheiro, PIX, Débito, Crédito) de hoje
+  const porFormaHoje = {
+    Dinheiro: 0,
+    PIX: 0,
+    Cartao_Debito: 0,
+    Cartao_Credito: 0
+  };
+  concluidosHoje.forEach(a => {
+    const bruto = getValorBrutoAgendamento(a);
+    const f = a.forma_pagamento || 'Dinheiro';
+    const fKey = porFormaHoje.hasOwnProperty(f) ? f : 'Dinheiro';
+    porFormaHoje[fKey] += bruto;
+  });
 
   const fin = calcularFinanceiroGeral();
 
   const elFatHoje = document.getElementById('kpi-faturamento-hoje');
-  if (elFatHoje) elFatHoje.textContent = formatarMoeda(fin.faturamentoHoje);
+  if (elFatHoje) elFatHoje.textContent = formatarMoeda(faturamentoHoje);
 
   const elFatHojeQtd = document.getElementById('kpi-faturamento-hoje-qtd');
-  if (elFatHojeQtd) elFatHojeQtd.textContent = fin.qtdHojeConcluidos + ' atendimentos concluídos hoje';
+  if (elFatHojeQtd) elFatHojeQtd.textContent = `${cortesHoje} atendimento${cortesHoje === 1 ? '' : 's'} concluído${cortesHoje === 1 ? '' : 's'} hoje`;
 
   const elCortesHoje = document.getElementById('kpi-cortes-hoje');
-  if (elCortesHoje) elCortesHoje.textContent = fin.qtdHojeConcluidos;
+  if (elCortesHoje) elCortesHoje.textContent = cortesHoje;
 
   const elFatMes = document.getElementById('kpi-faturamento-mes');
   if (elFatMes) elFatMes.textContent = formatarMoeda(fin.faturamentoMes);
@@ -1789,14 +1848,14 @@ function renderDashboard() {
   const elComissoes = document.getElementById('kpi-comissoes-pendentes');
   if (elComissoes) elComissoes.textContent = formatarMoeda(fin.totalComissoesPendentes);
 
-  renderBreakdownFormas(fin.porForma);
+  renderBreakdownFormas(porFormaHoje);
   renderGraficoSemana();
   renderAgendaHojeDashboard();
 }
 
 function calcularFinanceiroGeral() {
-  const hoje = getHojeString();
-  const mesAtual = hoje.substring(0, 7);
+  const hojeYMD = obterDataHojeLocalYMD();
+  const mesAtual = hojeYMD.substring(0, 7);
 
   let faturamentoBrutoTotal = 0;
   let totalTaxasRetidas = 0;
@@ -1816,29 +1875,30 @@ function calcularFinanceiroGeral() {
   const lancamentosFuturos = [];
 
   let porForma = {
-    Dinheiro: { bruto: 0, taxa: 0, liquido: 0 },
-    PIX: { bruto: 0, taxa: 0, liquido: 0 },
-    Cartao_Debito: { bruto: 0, taxa: 0, liquido: 0 },
-    Cartao_Credito: { bruto: 0, taxa: 0, liquido: 0 }
+    Dinheiro: { bruto: 0, taxa: 0, liquido: 0, qtd: 0 },
+    PIX: { bruto: 0, taxa: 0, liquido: 0, qtd: 0 },
+    Cartao_Debito: { bruto: 0, taxa: 0, liquido: 0, qtd: 0 },
+    Cartao_Credito: { bruto: 0, taxa: 0, liquido: 0, qtd: 0 }
   };
 
   (appState.agendamentos || []).forEach(a => {
-    if (a.status === 'Concluido') {
-      const valorBruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
+    const status = String(a.status || '').trim().toLowerCase();
+    if (status === 'concluido') {
+      const valorBruto = getValorBrutoAgendamento(a);
       const forma = a.forma_pagamento || 'Dinheiro';
+      const aDataYMD = extrairDataYMD(a.data);
 
-      // Taxas e compensação bancária
       let taxaValor = 0;
       let valorLiquido = valorBruto;
-      let dataComp = a.data || hoje;
+      let dataComp = extrairDataYMD(a.data_compensacao) || aDataYMD || hojeYMD;
       let taxaPct = 0;
 
       if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined && a.data_compensacao) {
         taxaValor = parseFloat(a.taxa_aplicada_valor) || 0;
         valorLiquido = parseFloat(a.valor_liquido) || 0;
-        dataComp = a.data_compensacao;
+        dataComp = extrairDataYMD(a.data_compensacao);
       } else {
-        const calc = calcularTaxaECompensacao(valorBruto, forma, appState.config, a.data);
+        const calc = calcularTaxaECompensacao(valorBruto, forma, appState.config, aDataYMD);
         taxaValor = calc.taxaAplicadaValor;
         valorLiquido = calc.valorLiquido;
         dataComp = calc.dataCompensacao;
@@ -1849,14 +1909,14 @@ function calcularFinanceiroGeral() {
       totalTaxasRetidas += taxaValor;
       faturamentoLiquidoTotal += valorLiquido;
 
-      // Por forma de pagamento
       const fKey = porForma.hasOwnProperty(forma) ? forma : 'Dinheiro';
       porForma[fKey].bruto += valorBruto;
       porForma[fKey].taxa += taxaValor;
       porForma[fKey].liquido += valorLiquido;
+      porForma[fKey].qtd++;
 
       // Hoje
-      if (a.data === hoje) {
+      if (aDataYMD === hojeYMD) {
         faturamentoHojeBruto += valorBruto;
         faturamentoHojeTaxas += taxaValor;
         faturamentoHojeLiquido += valorLiquido;
@@ -1864,17 +1924,21 @@ function calcularFinanceiroGeral() {
       }
 
       // Mês
-      if (a.data && a.data.startsWith(mesAtual)) {
+      if (aDataYMD && aDataYMD.startsWith(mesAtual)) {
         faturamentoMesBruto += valorBruto;
         faturamentoMesLiquido += valorLiquido;
       }
 
+      // Regras de Caixa:
       // Dinheiro físico na gaveta
       if (forma === 'Dinheiro') {
         totalDinheiroEntrada += valorBruto;
+      } else if (forma === 'PIX') {
+        // PIX: D+0 SEMPRE compensa na hora na conta bancária (nunca vai para futuros)
+        totalDisponivelCompensado += valorLiquido;
       } else {
-        // PIX / Cartões
-        if (dataComp <= hoje) {
+        // Apenas Cartão de Débito e Cartão de Crédito
+        if (dataComp <= hojeYMD) {
           totalDisponivelCompensado += valorLiquido;
         } else {
           totalAReceberFuturo += valorLiquido;
@@ -1883,10 +1947,10 @@ function calcularFinanceiroGeral() {
             cliente_nome: a.cliente_nome,
             servico_nome: a.servico_nome,
             barbeiro_nome: a.barbeiro_nome,
-            data: a.data,
+            data: aDataYMD,
             data_compensacao: dataComp,
             forma_pagamento: forma,
-            taxa_pct: taxaPct || (forma === 'Cartao_Credito' ? (appState.config?.taxa_credito_pct || 3.99) : (forma === 'Cartao_Debito' ? (appState.config?.taxa_debito_pct || 1.99) : (appState.config?.taxa_pix_pct || 0))),
+            taxa_pct: taxaPct || (forma === 'Cartao_Credito' ? (appState.config?.taxa_credito_pct || 3.99) : (appState.config?.taxa_debito_pct || 1.99)),
             valor_bruto: valorBruto,
             taxa_aplicada_valor: taxaValor,
             valor_liquido: valorLiquido
@@ -1957,7 +2021,8 @@ function calcularSaldoBarbeiro(barbeiroId) {
   let totalComissaoGerada = 0;
 
   (appState.agendamentos || []).forEach(a => {
-    if (String(a.barbeiro_id) === String(barbeiroId) && a.status === 'Concluido') {
+    const st = String(a.status || '').trim().toLowerCase();
+    if (String(a.barbeiro_id) === String(barbeiroId) && st === 'concluido') {
       const preco = parseFloat(a.servico_preco) || 0;
       totalProduzido += preco;
       const comissao = a.comissao_valor !== undefined ? parseFloat(a.comissao_valor) : (preco * (comissaoPct / 100));
@@ -1988,32 +2053,53 @@ function renderBreakdownFormas(porForma) {
   const container = document.getElementById('dash-breakdown-formas');
   if (!container) return;
 
-  const total = Object.values(porForma).reduce((a, b) => a + b, 0) || 1;
   const labels = {
     Dinheiro: { nome: 'Dinheiro (Espécie)', cor: 'text-emerald-400', bg: 'bg-emerald-500' },
-    PIX: { nome: 'PIX', cor: 'text-gold-400', bg: 'bg-gold-500' },
+    PIX: { nome: 'PIX Instantâneo', cor: 'text-gold-400', bg: 'bg-gold-500' },
     Cartao_Debito: { nome: 'Cartão de Débito', cor: 'text-blue-400', bg: 'bg-blue-500' },
     Cartao_Credito: { nome: 'Cartão de Crédito', cor: 'text-purple-400', bg: 'bg-purple-500' }
   };
 
+  const formasObj = porForma || {};
+  const chaves = ['Dinheiro', 'PIX', 'Cartao_Debito', 'Cartao_Credito'];
+
+  let total = 0;
+  const valores = {};
+
+  chaves.forEach(k => {
+    const raw = formasObj[k];
+    let v = 0;
+    if (typeof raw === 'object' && raw !== null) {
+      v = parseFloat(raw.bruto) || 0;
+    } else {
+      v = parseFloat(raw) || 0;
+    }
+    valores[k] = v;
+    total += v;
+  });
+
+  // Previne divisão por zero para eliminar definitivamente o erro de NaN%:
+  const pctCalc = (val, tot) => tot > 0 ? ((val / tot) * 100).toFixed(0) + '%' : '0%';
+
   let html = '';
-  for (let k in porForma) {
-    const val = porForma[k];
-    const pct = ((val / total) * 100).toFixed(0);
-    const item = labels[k] || { nome: k, cor: 'text-white', bg: 'bg-slate-500' };
+  chaves.forEach(k => {
+    const val = valores[k];
+    const pct = pctCalc(val, total);
+    const item = labels[k];
 
     html += `
       <div>
         <div class="flex items-center justify-between text-xs mb-1">
           <span class="text-slate-300 font-medium">${item.nome}</span>
-          <span class="${item.cor} font-bold">${formatarMoeda(val)} (${pct}%)</span>
+          <span class="${item.cor} font-bold">${formatarMoeda(val)} (${pct})</span>
         </div>
         <div class="w-full h-1.5 bg-dark-900 rounded-full overflow-hidden">
-          <div class="h-full ${item.bg}" style="width: ${pct}%"></div>
+          <div class="h-full ${item.bg}" style="width: ${pct}"></div>
         </div>
       </div>
     `;
-  }
+  });
+
   container.innerHTML = html;
 }
 
@@ -2028,15 +2114,20 @@ function renderGraficoSemana() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const dataStr = d.toISOString().split('T')[0];
-    const diaMes = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const ano = d.getFullYear();
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    const dataStr = `${ano}-${mes}-${dia}`;
+    const diaMes = `${dia}/${mes}`;
     labels.push(diaMes);
     datas.push(dataStr);
 
     let soma = 0;
     (appState.agendamentos || []).forEach(a => {
-      if (a.data === dataStr && a.status === 'Concluido') {
-        soma += (parseFloat(a.servico_preco) || 0);
+      const aDataYMD = extrairDataYMD(a.data);
+      const status = String(a.status || '').trim().toLowerCase();
+      if (aDataYMD === dataStr && status === 'concluido') {
+        soma += getValorBrutoAgendamento(a);
       }
     });
     valores.push(soma);
@@ -2095,13 +2186,10 @@ function renderAgendaHojeDashboard() {
   const tbody = document.getElementById('dash-tabela-hoje-tbody');
   if (!tbody) return;
 
-  const hoje = getHojeString();
+  const hojeYMD = obterDataHojeLocalYMD();
   const agendamentosHoje = (appState.agendamentos || [])
-    .filter(a => {
-      const dLimpa = String(a.data || '').trim().split('T')[0].split(' ')[0];
-      return dLimpa === hoje;
-    })
-    .sort((a, b) => formatarHora(a.horario).localeCompare(formatarHora(b.horario)));
+    .filter(a => extrairDataYMD(a.data) === hojeYMD)
+    .sort(compararAgendamentosInteligente);
 
   if (agendamentosHoje.length === 0) {
     tbody.innerHTML = `
@@ -2152,7 +2240,8 @@ function renderAgendaBarbeiroPills() {
   if (!container) return;
 
   const dataFiltro = document.getElementById('filtro-agendamento-data').value;
-  const agds = (appState.agendamentos || []).filter(a => !dataFiltro || a.data === dataFiltro);
+  const dFiltroYMD = extrairDataYMD(dataFiltro);
+  const agds = (appState.agendamentos || []).filter(a => !dFiltroYMD || extrairDataYMD(a.data) === dFiltroYMD);
 
   let html = `
     <button type="button" onclick="filtrarAgendaPorBarbeiroPill('todos')" class="px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 flex items-center gap-1.5 ${currentAgendaPillBarberId === 'todos' ? 'bg-gold-500 text-dark-900 shadow-md shadow-gold-500/20' : 'bg-dark-800 text-slate-300 hover:text-white border border-dark-700'}">
@@ -2260,7 +2349,8 @@ function renderAgendamentos() {
   let lista = [...(appState.agendamentos || [])];
 
   if (dataFiltro) {
-    lista = lista.filter(x => x.data === dataFiltro);
+    const dF = extrairDataYMD(dataFiltro);
+    lista = lista.filter(x => extrairDataYMD(x.data) === dF);
   }
   if (barbeiroFiltro && barbeiroFiltro !== 'todos') {
     lista = lista.filter(x => String(x.barbeiro_id) === String(barbeiroFiltro));
@@ -2756,13 +2846,18 @@ function renderTabelaLancamentosFuturos(futuros, totalFuturo) {
   if (badgeTotal) badgeTotal.textContent = `Total a Compensar: ${formatarMoeda(totalFuturo || 0)}`;
   if (!tbody) return;
 
-  if (!futuros || futuros.length === 0) {
+  // Exibe APENAS transações em Débito e Crédito que ainda não foram compensadas
+  const apenasCartoesPendentes = (futuros || []).filter(f => 
+    f.forma_pagamento === 'Cartao_Debito' || f.forma_pagamento === 'Cartao_Credito'
+  );
+
+  if (apenasCartoesPendentes.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="7" class="p-8 text-center text-slate-500">
           <div class="flex flex-col items-center justify-center gap-2">
             <i data-lucide="check-circle-2" class="w-8 h-8 text-emerald-400/60"></i>
-            <span class="text-xs font-medium text-slate-400">Nenhum lançamento futuro pendente. Todas as transações em cartão/PIX já compensaram!</span>
+            <span class="text-xs font-medium text-slate-400">Nenhum lançamento futuro pendente. Todas as transações em cartão já foram compensadas!</span>
           </div>
         </td>
       </tr>
@@ -2771,24 +2866,21 @@ function renderTabelaLancamentosFuturos(futuros, totalFuturo) {
     return;
   }
 
-  const hoje = getHojeString();
+  const hoje = obterDataHojeLocalYMD();
   let html = '';
-  futuros.forEach(f => {
+  apenasCartoesPendentes.forEach(f => {
     const dataVenda = formatarDataPt(f.data);
-    const dataComp = formatarDataPt(f.data_compensacao);
-
-    let badgePrazo = '';
-    if (f.data_compensacao === hoje) {
-      badgePrazo = '<span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-bold">Compensa Hoje</span>';
-    } else {
-      badgePrazo = `<span class="bg-purple-500/10 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded text-[10px] font-bold">Cai em ${dataComp}</span>`;
+    let dataCompPt = formatarDataPt(f.data_compensacao);
+    if (!dataCompPt || dataCompPt === '--/--') {
+      const fallbackComp = calcularDataCompensacao(f.data, f.forma_pagamento === 'Cartao_Credito' ? 30 : 1);
+      dataCompPt = formatarDataPt(fallbackComp);
     }
+
+    const badgePrazo = `<span class="bg-purple-500/10 text-purple-300 border border-purple-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold">Cai em ${dataCompPt}</span>`;
 
     const badgeForma = f.forma_pagamento === 'Cartao_Credito'
       ? `<span class="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-[10px] font-bold">Crédito (${f.taxa_pct}%)</span>`
-      : (f.forma_pagamento === 'Cartao_Debito'
-        ? `<span class="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded text-[10px] font-bold">Débito (${f.taxa_pct}%)</span>`
-        : `<span class="bg-gold-500/20 text-gold-300 px-2 py-0.5 rounded text-[10px] font-bold">${formatarFormaPagamento(f.forma_pagamento)} (${f.taxa_pct}%)</span>`);
+      : `<span class="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded text-[10px] font-bold">Débito (${f.taxa_pct}%)</span>`;
 
     html += `
       <tr class="hover:bg-dark-900/40 transition-colors">
@@ -2817,8 +2909,9 @@ function renderExtratoCaixa() {
   const movimentos = [];
 
   (appState.agendamentos || []).forEach(a => {
-    if (a.status === 'Concluido') {
-      const bruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
+    const st = String(a.status || '').trim().toLowerCase();
+    if (st === 'concluido') {
+      const bruto = getValorBrutoAgendamento(a);
       let taxa = 0;
       let liquido = bruto;
 
@@ -2826,7 +2919,7 @@ function renderExtratoCaixa() {
         taxa = parseFloat(a.taxa_aplicada_valor) || 0;
         liquido = parseFloat(a.valor_liquido) || 0;
       } else {
-        const calc = calcularTaxaECompensacao(bruto, a.forma_pagamento, appState.config, a.data);
+        const calc = calcularTaxaECompensacao(bruto, a.forma_pagamento, appState.config, extrairDataYMD(a.data));
         taxa = calc.taxaAplicadaValor;
         liquido = calc.valorLiquido;
       }
@@ -2985,12 +3078,18 @@ function setFechamentoData(atalho) {
 }
 
 function calcularFechamentoDiario(dataIso) {
-  if (!dataIso) dataIso = getHojeString();
+  const inputEl = document.getElementById('fechamento-data-filtro') || document.getElementById('input-data-fechamento');
+  const dataFiltroYMD = extrairDataYMD(dataIso) || extrairDataYMD(inputEl ? inputEl.value : '') || obterDataHojeLocalYMD();
+
+  if (inputEl && !inputEl.value) {
+    inputEl.value = dataFiltroYMD;
+  }
 
   // 1. Atendimentos Concluídos na data especificada
-  const atendimentosDia = (appState.agendamentos || []).filter(a => 
-    a.data === dataIso && a.status === 'Concluido'
-  );
+  const atendimentosDia = (appState.agendamentos || []).filter(a => {
+    const status = String(a.status || '').trim().toLowerCase();
+    return status === 'concluido' && extrairDataYMD(a.data) === dataFiltroYMD;
+  });
 
   let totalBruto = 0;
   let totalTaxas = 0;
@@ -3007,19 +3106,19 @@ function calcularFechamentoDiario(dataIso) {
   let qtdFuturos = 0;
 
   atendimentosDia.forEach(a => {
-    const valorBruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
+    const valorBruto = getValorBrutoAgendamento(a);
     const f = a.forma_pagamento || 'Dinheiro';
 
     let taxaValor = 0;
     let valorLiquido = valorBruto;
-    let dataComp = a.data || dataIso;
+    let dataComp = extrairDataYMD(a.data_compensacao) || extrairDataYMD(a.data) || dataFiltroYMD;
 
     if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined && a.data_compensacao) {
       taxaValor = parseFloat(a.taxa_aplicada_valor) || 0;
       valorLiquido = parseFloat(a.valor_liquido) || 0;
-      dataComp = a.data_compensacao;
+      dataComp = extrairDataYMD(a.data_compensacao);
     } else {
-      const calc = calcularTaxaECompensacao(valorBruto, f, appState.config, a.data);
+      const calc = calcularTaxaECompensacao(valorBruto, f, appState.config, extrairDataYMD(a.data));
       taxaValor = calc.taxaAplicadaValor;
       valorLiquido = calc.valorLiquido;
       dataComp = calc.dataCompensacao;
@@ -3036,8 +3135,12 @@ function calcularFechamentoDiario(dataIso) {
 
     if (f === 'Dinheiro') {
       // Dinheiro físico cai na gaveta na hora
+    } else if (f === 'PIX') {
+      // PIX D+0: disponível imediatamente na conta bancária
+      disponivelHoje += valorLiquido;
     } else {
-      if (dataComp <= dataIso) {
+      // Cartão Débito e Cartão Crédito
+      if (dataComp <= dataFiltroYMD) {
         disponivelHoje += valorLiquido;
       } else {
         aReceberFuturo += valorLiquido;
@@ -3048,7 +3151,7 @@ function calcularFechamentoDiario(dataIso) {
 
   // 2. Sangrias na data especificada
   const sangriasDia = (appState.sangrias || []).filter(s => 
-    s.data_hora && s.data_hora.startsWith(dataIso)
+    extrairDataYMD(s.data || s.data_hora) === dataFiltroYMD
   );
   let totalSangrias = 0;
   sangriasDia.forEach(s => {
@@ -3057,7 +3160,7 @@ function calcularFechamentoDiario(dataIso) {
 
   // 3. Pagamentos a barbeiros na data especificada
   const pagamentosDia = (appState.pagamentosBarbeiros || []).filter(p => 
-    p.data_hora && p.data_hora.startsWith(dataIso)
+    extrairDataYMD(p.data || p.data_hora) === dataFiltroYMD
   );
   let totalPagamentos = 0;
   let pagamentosDinheiro = 0;
@@ -3177,14 +3280,14 @@ function calcularFechamentoDiario(dataIso) {
     } else {
       let h = '';
       atendimentosDia.forEach(a => {
-        const bruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
+        const bruto = getValorBrutoAgendamento(a);
         let taxa = 0;
         let liq = bruto;
         if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined) {
           taxa = parseFloat(a.taxa_aplicada_valor) || 0;
           liq = parseFloat(a.valor_liquido) || 0;
         } else {
-          const calc = calcularTaxaECompensacao(bruto, a.forma_pagamento, appState.config, a.data);
+          const calc = calcularTaxaECompensacao(bruto, a.forma_pagamento, appState.config, extrairDataYMD(a.data));
           taxa = calc.taxaAplicadaValor;
           liq = calc.valorLiquido;
         }
@@ -3220,19 +3323,21 @@ function calcularFechamentoDiario(dataIso) {
   if (window.lucide) lucide.createIcons();
 }
 
-function imprimirFechamentoCaixa() {
-  const dataInput = document.getElementById('fechamento-data-filtro');
-  const dataIso = dataInput ? dataInput.value : getHojeString();
-  const printArea = document.getElementById('print-fechamento-area');
-  if (!printArea) return;
-
+function imprimirCupomFechamento(dados) {
   const cfg = appState.config || {};
-  const nomeBarbearia = cfg.nome_barbearia || 'Barbearia Vintage & Estilo';
-  const tel = cfg.telefone_barbearia || '';
+  const nomeBarbearia = (dados && dados.nomeBarbearia) || cfg.nome_barbearia || 'Barbearia Vintage & Estilo';
+  const tel = (dados && dados.telefone) || cfg.telefone_barbearia || '';
 
-  const atendimentosDia = (appState.agendamentos || []).filter(a => 
-    a.data === dataIso && a.status === 'Concluido'
-  );
+  const inputEl = document.getElementById('fechamento-data-filtro') || document.getElementById('input-data-fechamento');
+  const dataIso = extrairDataYMD((dados && dados.dataIso) || (inputEl ? inputEl.value : '') || obterDataHojeLocalYMD());
+  const dataRefPt = formatarDataPt(dataIso);
+  const horaEmissao = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const dataHoraEmissao = `${formatarDataPt(obterDataHojeLocalYMD())} às ${horaEmissao}`;
+
+  const atendimentosDia = (dados && dados.atendimentos) || (appState.agendamentos || []).filter(a => {
+    const status = String(a.status || '').trim().toLowerCase();
+    return status === 'concluido' && extrairDataYMD(a.data) === dataIso;
+  });
 
   let totalBruto = 0;
   let totalTaxas = 0;
@@ -3244,26 +3349,20 @@ function imprimirFechamentoCaixa() {
     Cartao_Credito: { bruto: 0, taxa: 0, liquido: 0 }
   };
 
-  let disponivelHoje = 0;
-  let aReceberFuturo = 0;
-
   atendimentosDia.forEach(a => {
-    const valorBruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
+    const valorBruto = getValorBrutoAgendamento(a);
     const f = a.forma_pagamento || 'Dinheiro';
 
     let taxaValor = 0;
     let valorLiquido = valorBruto;
-    let dataComp = a.data || dataIso;
 
-    if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined && a.data_compensacao) {
+    if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined) {
       taxaValor = parseFloat(a.taxa_aplicada_valor) || 0;
       valorLiquido = parseFloat(a.valor_liquido) || 0;
-      dataComp = a.data_compensacao;
     } else {
-      const calc = calcularTaxaECompensacao(valorBruto, f, appState.config, a.data);
+      const calc = calcularTaxaECompensacao(valorBruto, f, appState.config, extrairDataYMD(a.data));
       taxaValor = calc.taxaAplicadaValor;
       valorLiquido = calc.valorLiquido;
-      dataComp = calc.dataCompensacao;
     }
 
     totalBruto += valorBruto;
@@ -3274,159 +3373,157 @@ function imprimirFechamentoCaixa() {
     porForma[fKey].bruto += valorBruto;
     porForma[fKey].taxa += taxaValor;
     porForma[fKey].liquido += valorLiquido;
-
-    if (f === 'Dinheiro') {
-      // Dinheiro físico
-    } else {
-      if (dataComp <= dataIso) disponivelHoje += valorLiquido;
-      else aReceberFuturo += valorLiquido;
-    }
   });
 
-  const sangriasDia = (appState.sangrias || []).filter(s => 
-    s.data_hora && s.data_hora.startsWith(dataIso)
+  const sangriasDia = (dados && dados.sangrias) || (appState.sangrias || []).filter(s => 
+    extrairDataYMD(s.data || s.data_hora) === dataIso
   );
   let totalSangrias = 0;
-  sangriasDia.forEach(s => totalSangrias += parseFloat(s.valor) || 0);
+  sangriasDia.forEach(s => {
+    totalSangrias += parseFloat(s.valor) || 0;
+  });
 
-  const pagamentosDia = (appState.pagamentosBarbeiros || []).filter(p => 
-    p.data_hora && p.data_hora.startsWith(dataIso)
+  const pagamentosDia = (dados && dados.pagamentos) || (appState.pagamentosBarbeiros || []).filter(p => 
+    extrairDataYMD(p.data || p.data_hora) === dataIso
   );
   let totalPagamentos = 0;
   let pagamentosDinheiro = 0;
   pagamentosDia.forEach(p => {
     const val = parseFloat(p.valor) || 0;
     totalPagamentos += val;
-    if (p.forma_pagamento === 'Dinheiro') pagamentosDinheiro += val;
+    if (p.forma_pagamento === 'Dinheiro') {
+      pagamentosDinheiro += val;
+    }
   });
 
   const saldoGaveta = (porForma.Dinheiro.bruto || 0) - totalSangrias - pagamentosDinheiro;
-  const pagamentosNaoDinheiro = totalPagamentos - pagamentosDinheiro;
-  const saldoDispHoje = Math.max(0, saldoGaveta + disponivelHoje - pagamentosNaoDinheiro);
-  const saldoLiquidoGeral = totalLiquido - totalSangrias - totalPagamentos;
+  const saldoLiquidoFinal = totalLiquido - totalSangrias - totalPagamentos;
 
-  let sangriasHtml = '';
-  if (sangriasDia.length > 0) {
-    sangriasDia.forEach(s => {
-      const hora = s.data_hora ? s.data_hora.substring(11, 16) : '';
-      sangriasHtml += `<div style="display:flex; justify-content:space-between; margin:2px 0;"><span>[${hora}] ${s.motivo || 'Sangria'}:</span><span>-${formatarMoeda(s.valor)}</span></div>`;
-    });
+  const cupomHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Fechamento de Caixa - ${nomeBarbearia}</title>
+  <style>
+    @page { size: 80mm auto; margin: 3mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', Courier, monospace; color: #000; background: #fff; }
+    body { padding: 6px 4px; font-size: 11px; line-height: 1.35; max-width: 380px; margin: 0 auto; }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .bold { font-weight: bold; }
+    .divider { border-top: 1px dashed #000; margin: 6px 0; }
+    .divider-solid { border-top: 2px solid #000; margin: 6px 0; }
+    .row { display: flex; justify-content: space-between; margin: 2px 0; }
+    .title { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; }
+    .subtitle { font-size: 11px; font-weight: bold; margin-top: 2px; }
+    .section-title { font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 3px; letter-spacing: 0.3px; }
+    .signature-box { margin-top: 24px; text-align: center; }
+    .signature-line { border-top: 1px solid #000; width: 80%; margin: 0 auto 4px auto; }
+    @media print {
+      body { width: 100%; max-width: 100%; padding: 0; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="text-center">
+    <div class="title">${nomeBarbearia}</div>
+    ${tel ? `<div style="font-size: 10px;">Contato: ${tel}</div>` : ''}
+    <div class="subtitle">*** FECHAMENTO DE CAIXA DIÁRIO ***</div>
+    <div style="font-size: 10px; margin-top: 2px;">Data de Referência: <strong>${dataRefPt}</strong></div>
+    <div style="font-size: 9px; color: #444;">Emissão: ${dataHoraEmissao}</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section-title">RESUMO DO FATURAMENTO</div>
+  <div class="row"><span>Total Bruto (${atendimentosDia.length} atend.):</span><span class="bold">${formatarMoeda(totalBruto)}</span></div>
+  <div class="row"><span>(-) Taxas de Maquininha:</span><span>-${formatarMoeda(totalTaxas)}</span></div>
+  <div class="row bold" style="border-top: 1px dotted #000; padding-top: 2px; margin-top: 2px;">
+    <span>(=) FATURAMENTO LÍQUIDO:</span><span>${formatarMoeda(totalLiquido)}</span>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section-title">ARRECADAÇÃO POR FORMA</div>
+  <div class="row"><span>💵 Dinheiro Físico:</span><span class="bold">${formatarMoeda(porForma.Dinheiro.bruto)}</span></div>
+  <div class="row"><span>⚡ PIX (D+0 Conta):</span><span class="bold">${formatarMoeda(porForma.PIX.bruto)}</span></div>
+  <div class="row"><span>💳 Cartão Débito:</span><span>${formatarMoeda(porForma.Cartao_Debito.bruto)} (Líq: ${formatarMoeda(porForma.Cartao_Debito.liquido)})</span></div>
+  <div class="row"><span>💳 Cartão Crédito:</span><span>${formatarMoeda(porForma.Cartao_Credito.bruto)} (Líq: ${formatarMoeda(porForma.Cartao_Credito.liquido)})</span></div>
+
+  <div class="divider"></div>
+
+  <div class="section-title">SAÍDAS E RETIRADAS DO DIA</div>
+  <div class="row"><span>(-) Sangrias do Caixa:</span><span>-${formatarMoeda(totalSangrias)}</span></div>
+  <div class="row"><span>(-) Comissões Pagas:</span><span>-${formatarMoeda(totalPagamentos)}</span></div>
+  ${pagamentosDinheiro > 0 ? `<div class="row" style="font-size:9px; padding-left: 8px;"><span>↳ Pagtos em Espécie:</span><span>-${formatarMoeda(pagamentosDinheiro)}</span></div>` : ''}
+
+  <div class="divider-solid"></div>
+
+  <div class="section-title">CONFERÊNCIA DE GAVETA & SALDO</div>
+  <div class="row bold" style="font-size: 12px;">
+    <span>SALDO EM GAVETA (FÍSICO):</span>
+    <span>${formatarMoeda(saldoGaveta)}</span>
+  </div>
+  <div style="font-size: 9px; color: #555; margin-bottom: 4px;">(Entradas em Dinheiro - Sangrias - Pagtos em Dinheiro)</div>
+
+  <div class="row bold" style="border-top: 1px dotted #000; padding-top: 3px;">
+    <span>SALDO LÍQUIDO DO DIA:</span>
+    <span>${formatarMoeda(saldoLiquidoFinal)}</span>
+  </div>
+  <div style="font-size: 9px; color: #555;">(Faturamento Líquido Real - Todas as Saídas)</div>
+
+  <div class="divider"></div>
+
+  <div class="signature-box">
+    <div class="signature-line"></div>
+    <div style="font-size: 10px;">Assinatura do Conferente / Gestor</div>
+  </div>
+
+  <div class="no-print" style="margin-top: 16px; text-align: center;">
+    <button onclick="window.print()" style="padding: 6px 16px; font-size: 12px; font-weight: bold; cursor: pointer; border: 1px solid #000; border-radius: 4px;">Imprimir Agora</button>
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=450,height=650');
+  if (win) {
+    win.document.open();
+    win.document.write(cupomHtml);
+    win.document.close();
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 350);
   } else {
-    sangriasHtml = `<div style="color:#666;">Nenhuma sangria realizada.</div>`;
+    const printArea = document.getElementById('print-fechamento-area');
+    if (printArea) {
+      printArea.innerHTML = cupomHtml;
+      window.print();
+    }
   }
+}
 
-  let servicosHtml = '';
-  if (atendimentosDia.length > 0) {
-    atendimentosDia.forEach(a => {
-      const bruto = parseFloat(a.total_venda) || parseFloat(a.total_comanda) || parseFloat(a.servico_preco) || 0;
-      let taxa = 0;
-      let liq = bruto;
-      if (a.taxa_aplicada_valor !== undefined && a.valor_liquido !== undefined) {
-        taxa = parseFloat(a.taxa_aplicada_valor) || 0;
-        liq = parseFloat(a.valor_liquido) || 0;
-      } else {
-        const calc = calcularTaxaECompensacao(bruto, a.forma_pagamento, appState.config, a.data);
-        taxa = calc.taxaAplicadaValor;
-        liq = calc.valorLiquido;
-      }
-      servicosHtml += `
-        <div style="border-bottom:1px dotted #ccc; padding:3px 0; margin-bottom:2px;">
-          <div style="display:flex; justify-content:space-between;">
-            <span><strong>${formatarHora(a.horario)}</strong> ${a.servico_nome} (${a.cliente_nome})</span>
-            <span>${formatarMoeda(bruto)}</span>
-          </div>
-          <div style="display:flex; justify-content:space-between; font-size:9px; color:#555;">
-            <span>${formatarFormaPagamento(a.forma_pagamento)} ${taxa > 0 ? `(Taxa: -${formatarMoeda(taxa)})` : ''}</span>
-            <span style="font-weight:bold; color:#000;">Líq: ${formatarMoeda(liq)}</span>
-          </div>
-        </div>
-      `;
-    });
-  } else {
-    servicosHtml = `<div style="color:#666;">Nenhum atendimento concluído.</div>`;
-  }
-
-  printArea.innerHTML = `
-    <div style="font-family: monospace; font-size: 11px; line-height: 1.4; color: #000; padding: 12px; max-width: 340px; margin: 0 auto; background: #fff;">
-      <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
-        <h2 style="font-size: 15px; margin: 0; font-weight: bold; text-transform: uppercase;">${nomeBarbearia}</h2>
-        ${tel ? `<p style="margin: 2px 0 0; font-size: 10px;">Contato: ${tel}</p>` : ''}
-        <h3 style="font-size: 12px; margin: 4px 0 0; font-weight: bold;">FECHAMENTO DE CAIXA & MAQUININHA</h3>
-        <p style="margin: 2px 0 0; font-size: 11px;">Data de Referência: <strong>${formatarDataPt(dataIso)}</strong></p>
-        <p style="font-size: 9px; margin: 2px 0 0; color: #444;">Impresso em: ${getHojeAgoraString()}</p>
-      </div>
-
-      <div style="border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
-        <div style="font-weight: bold; margin-bottom: 4px;">FATURAMENTO BRUTO x LÍQUIDO:</div>
-        <div style="display: flex; justify-content: space-between;"><span>Total Bruto Cobrado:</span><span>${formatarMoeda(totalBruto)}</span></div>
-        <div style="display: flex; justify-content: space-between; color:#c00;"><span>Taxas de Maquininha:</span><span>-${formatarMoeda(totalTaxas)}</span></div>
-        <div style="display: flex; justify-content: space-between; font-weight: bold; border-top: 1px dotted #000; padding-top: 3px; margin-top: 3px;">
-          <span>FATURAMENTO LÍQUIDO REAL:</span><span>${formatarMoeda(totalLiquido)}</span>
-        </div>
-      </div>
-
-      <div style="border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
-        <div style="font-weight: bold; margin-bottom: 4px;">ARRECADAÇÃO POR FORMA DE PAGAMENTO:</div>
-        <div style="display: flex; justify-content: space-between;"><span>💵 Dinheiro:</span><span>${formatarMoeda(porForma.Dinheiro.bruto)}</span></div>
-        <div style="display: flex; justify-content: space-between;"><span>⚡ PIX (Líq: ${formatarMoeda(porForma.PIX.liquido)}):</span><span>${formatarMoeda(porForma.PIX.bruto)}</span></div>
-        <div style="display: flex; justify-content: space-between;"><span>💳 Débito (Líq: ${formatarMoeda(porForma.Cartao_Debito.liquido)}):</span><span>${formatarMoeda(porForma.Cartao_Debito.bruto)}</span></div>
-        <div style="display: flex; justify-content: space-between;"><span>💳 Crédito (Líq: ${formatarMoeda(porForma.Cartao_Credito.liquido)}):</span><span>${formatarMoeda(porForma.Cartao_Credito.bruto)}</span></div>
-      </div>
-
-      <div style="border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
-        <div style="font-weight: bold; margin-bottom: 4px;">DISPONIBILIDADE & PREVISÃO DE CAIXA:</div>
-        <div style="display: flex; justify-content: space-between; font-weight: bold;"><span>SALDO ESPERADO EM GAVETA:</span><span>${formatarMoeda(saldoGaveta)}</span></div>
-        <div style="display: flex; justify-content: space-between;"><span>Disponível Hoje (Caixa/Conta):</span><span>${formatarMoeda(saldoDispHoje)}</span></div>
-        <div style="display: flex; justify-content: space-between;"><span>A Receber Futuro (Cartão):</span><span>${formatarMoeda(aReceberFuturo)}</span></div>
-      </div>
-
-      <div style="border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
-        <div style="font-weight: bold; margin-bottom: 4px;">RETIRADAS E SANGRIAS DO DIA:</div>
-        <div style="display: flex; justify-content: space-between; font-weight: bold;"><span>Total Sangrias:</span><span>-${formatarMoeda(totalSangrias)}</span></div>
-        ${pagamentosDinheiro > 0 ? `<div style="display: flex; justify-content: space-between;"><span>Pagtos Barbeiros (Espécie):</span><span>-${formatarMoeda(pagamentosDinheiro)}</span></div>` : ''}
-        <div style="margin-top: 4px; font-size: 10px;">${sangriasHtml}</div>
-      </div>
-
-      <div style="border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 8px;">
-        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold;">
-          <span>SALDO LÍQUIDO FINAL DO DIA:</span>
-          <span>${formatarMoeda(saldoLiquidoGeral)}</span>
-        </div>
-        <div style="font-size: 9px; color: #555;">(Líquido real menos despesas e comissões)</div>
-      </div>
-
-      <div style="border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; font-size: 10px;">
-        <div style="font-weight: bold; margin-bottom: 4px;">ATENDIMENTOS DO DIA (${atendimentosDia.length}):</div>
-        ${servicosHtml}
-      </div>
-
-      <div style="text-align: center; margin-top: 25px; padding-top: 10px;">
-        <div style="border-top: 1px solid #000; width: 80%; margin: 0 auto 5px;"></div>
-        <p style="margin: 0; font-size: 10px;">Assinatura do Gestor / Responsável</p>
-      </div>
-    </div>
-  `;
-
-  window.print();
+function imprimirFechamentoCaixa() {
+  imprimirCupomFechamento();
 }
 
 function exportarFechamentoCSV(dataIso) {
-  if (!dataIso) {
-    const input = document.getElementById('fechamento-data-filtro');
-    dataIso = input ? input.value : getHojeString();
-  }
+  const input = document.getElementById('fechamento-data-filtro') || document.getElementById('input-data-fechamento');
+  const dataFiltroYMD = extrairDataYMD(dataIso || (input ? input.value : '') || obterDataHojeLocalYMD());
 
   const cfg = appState.config || {};
   const nomeBarbearia = cfg.nome_barbearia || 'GESTÃO PROFISSIONAL DE BARBEARIA';
 
-  const atendimentosDia = (appState.agendamentos || []).filter(a => 
-    a.data === dataIso && a.status === 'Concluido'
-  );
+  const atendimentosDia = (appState.agendamentos || []).filter(a => {
+    const status = String(a.status || '').trim().toLowerCase();
+    return status === 'concluido' && extrairDataYMD(a.data) === dataFiltroYMD;
+  });
   const sangriasDia = (appState.sangrias || []).filter(s => 
-    s.data_hora && s.data_hora.startsWith(dataIso)
+    extrairDataYMD(s.data || s.data_hora) === dataFiltroYMD
   );
   const pagamentosDia = (appState.pagamentosBarbeiros || []).filter(p => 
-    p.data_hora && p.data_hora.startsWith(dataIso)
+    extrairDataYMD(p.data || p.data_hora) === dataFiltroYMD
   );
 
   let totalBruto = 0;
@@ -4354,9 +4451,9 @@ function renderBarberAgenda() {
   let lista = (appState.agendamentos || []).filter(a => String(a.barbeiro_id) === String(bId));
 
   if (currentBarberAgendaFilter === 'hoje') {
-    lista = lista.filter(a => a.data === hoje);
+    lista = lista.filter(a => extrairDataYMD(a.data) === hoje);
   } else if (currentBarberAgendaFilter === 'proximos') {
-    lista = lista.filter(a => a.data >= hoje && a.status === 'Agendado');
+    lista = lista.filter(a => extrairDataYMD(a.data) >= hoje && (a.status === 'Agendado' || a.status === 'agendado'));
   }
 
   lista.sort(compararAgendamentosInteligente);
@@ -4501,10 +4598,13 @@ function renderBarberExtrato(sal) {
   }
 
   // 2. Histórico de Serviços Concluídos (Base de Cálculo das Comissões)
-  const concluidos = (appState.agendamentos || []).filter(a => String(a.barbeiro_id) === String(bId) && a.status === 'Concluido');
+  const concluidos = (appState.agendamentos || []).filter(a => {
+    const st = String(a.status || '').trim().toLowerCase();
+    return String(a.barbeiro_id) === String(bId) && st === 'concluido';
+  });
   concluidos.sort((a, b) => {
-    const dataA = String(a.data || '').trim().split('T')[0].split(' ')[0];
-    const dataB = String(b.data || '').trim().split('T')[0].split(' ')[0];
+    const dataA = extrairDataYMD(a.data);
+    const dataB = extrairDataYMD(b.data);
     if (dataA !== dataB) return dataB.localeCompare(dataA);
     return formatarHora(b.horario).localeCompare(formatarHora(a.horario));
   });
@@ -4750,20 +4850,25 @@ function limparTelefone(tel) {
 }
 
 function getHojeString() {
-  const d = new Date();
-  return d.toISOString().split('T')[0];
+  return obterDataHojeLocalYMD();
 }
 
 function getOntemString() {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
+  const ano = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
 }
 
 function getAmanhaString() {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
+  const ano = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
 }
 
 function getHoraAtualString() {
@@ -4774,8 +4879,8 @@ function getHoraAtualString() {
 }
 
 function getHojeAgoraString() {
+  const data = obterDataHojeLocalYMD();
   const d = new Date();
-  const data = d.toISOString().split('T')[0];
   const hora = d.toTimeString().split(' ')[0];
   return `${data} ${hora}`;
 }
